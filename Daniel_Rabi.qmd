@@ -1,0 +1,607 @@
+---
+title: "Equity Portfolio Decision Making"
+author: Daniel Rabi
+date: April 9, 2026
+backgroundcolor: lightblue
+format: html
+editor: visual
+embed-resources: true
+bibliography: references/references.bib
+csl: references/apa.csl
+#output-file: index
+nocite: |
+  @YahooFinance
+
+echo: FALSE
+message: FALSE
+warning: FALSE
+---
+
+![[@Zerdzicki_2026]](images/into_picture.jpg){fig-align="center" width="600"}
+
+Have you ever wondered how to decide whether you should add equity to your existing portfolio?
+
+In this project, I will walk you through the decision-making process for assessing equities before adding them to an existing portfolio.
+
+# The Portfolio
+
+For this project's portfolio, I used a fixed, fairly diversified existing portfolio that contains the following companies:
+
+```{r, message=FALSE, warning=FALSE}
+library(gt)
+
+dplyr::tibble(
+  Equity = c(
+    "NVIDIA",
+    "Boeing",
+    "Chevron",
+    "Coca-Cola",
+    "JPMorgan Chase & Co"
+  ),
+  Ticker = c(
+    "NVDA",
+    "BA",
+    "CVX",
+    "KO",
+    "JPM"
+  ),
+  Description = c(
+    "NVIDIA sells products in the Compute & Networking and Graphics segments with a high focus on automation and AI integration",
+    "Boeing manufactures and sells products and services in segments like Commercial Airplanes, Defence, and Space & Security",
+    "Chevron operates in all operational segments that provide energy resources across the world",
+    "Coca-Cola manufactures and sells non-alcoholic beverages worldwide",
+    "JPMorgan is a Commercial, Investment, and Asset & Wealth Management bank with operations around the world"
+  ),
+  Industry = c(
+    "Technology industry",
+    "Industrial industry",
+    "Energy industry",
+    "Beverages industry",
+    "Finance services industry"
+  ),
+  Shares = c(
+    "200",
+    "200",
+    "200",
+    "200",
+    "200"
+  ),
+  Weigth = c(
+    "20%",
+    "20%",
+    "20%",
+    "20%",
+    "20%"
+  )
+) %>% 
+  gt::gt() %>% 
+  gt::tab_header(title = "The Portfolio Table") %>% 
+  gt::tab_style(
+    style = cell_fill(color = "indianred"),
+    locations = cells_title(groups = "title")
+  ) %>% 
+  gt::tab_source_note(source_note = "(Yahoo Finance, n.d.)")
+```
+
+## The Portfolio's Efficient Frontier
+
+The efficient frontier is the set of portfolios plotted against their levels of risk and expected return [@Investopedia_2025]. Therefore, @Investopedia_2025 suggests that a portfolio is efficient if it provides the highest return for a given level of risk. However, to find the optimal portfolio, we need to identify the line with the highest Sharpe Ratio (slope) on the efficient frontier [@Vipond_2020].
+
+The Sharpe Ratio equation:
+
+$$
+\text{Sharpe Ratio} = \frac{E(R_P) - r_f}{\sigma(R_P)}
+$$
+
+Where:
+
+$r_f =$ The 10-year U.S. Treasury Bond [@FRED_2026]
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tidyquant)
+library(lubridate)
+library(rvest)
+library(ggrepel)
+library(TTR)
+library(plotly)
+library(xts)
+library(zoo)
+```
+
+```{r}
+portfolio_stocks <- c("NVDA", "BA", "CVX", "KO", "JPM")
+
+
+portfolio <- tidyquant::tq_get(
+  portfolio_stocks,
+  from = Sys.Date() - lubridate::years(5),
+  to = Sys.Date(),
+  get = "stock.prices"
+) %>% 
+  dplyr::group_by(symbol) %>% 
+  tidyquant::tq_transmute(
+    mutate_fun = to.weekly # Converting to weekly data because I don't want the data to be too noisy but I need large enough sample size for ML
+  ) %>% 
+  dplyr::mutate(return_log = log(adjusted / dplyr::lag(adjusted))) %>% 
+  tidyr::drop_na()
+
+
+portfolio_wide <- portfolio %>% 
+  dplyr::select(date, symbol, return_log) %>% 
+  tidyr::pivot_wider(names_from = symbol, values_from = return_log) 
+
+portfolio_wide <- portfolio_wide %>% 
+  dplyr::mutate(Portfolio_Return = 0.2 * portfolio_wide$NVDA + 0.2 * portfolio_wide$BA + 0.2 * portfolio_wide$CVX + 0.2 * portfolio_wide$KO + 0.2 * portfolio_wide$JPM)
+
+
+returns <- portfolio_wide %>% 
+  dplyr::select(-date, - Portfolio_Return)
+
+ann_returns <- colMeans(returns) * 52
+ann_cov <- stats::cov(returns, use = "pairwise.complete.obs") * 52
+
+
+# Static webscraping for the Risk Free Rate
+
+url <- "https://fred.stlouisfed.org/series/DGS10"
+
+rf_rate <- rvest::read_html(url) %>% 
+  rvest::html_element(".series-meta-observation-value") %>% # I'm using the . at the beginning b/c it's a class
+  rvest::html_text(trim = TRUE) %>% 
+  as.numeric()
+
+rf_rate <- rf_rate / 100
+
+# Grabbing the Risk Free Rate Using FRED API
+
+r_f <- tidyquant::tq_get(
+  "DGS10",
+  get = "economic.data",
+  from = Sys.Date() - 7,
+  to = Sys.Date()
+) %>% 
+  dplyr::arrange(date)
+
+r_f <- r_f[1, 3] %>% dplyr::pull(price)
+r_f <- r_f / 100 # I want the Risk Free to match with the rest of the return values
+```
+
+```{r}
+# Simulating different portfolio possibilities for the Efficient Frontier
+
+set.seed(123) # For replicability
+
+simulation <- replicate(5000, {
+  rnd_vals <- runif(5) # Randomizing 5 numbers
+  weights <- rnd_vals / sum(rnd_vals) # Creating weights that sum up to 1
+  
+  port_returns <- sum(weights * ann_returns)
+  port_sd <- sqrt(sum(weights * (ann_cov %*% weights))) # The %*% is for multiplying matrecies together
+  
+  c(
+    NVDA = weights[1],
+    BA = weights[2],
+    CVX = weights[3],
+    KO = weights[4],
+    JPM = weights[5],
+    return = port_returns,
+    sd = as.numeric(port_sd) # as.numeric is needed b/c we used a matrix multiplication
+  )
+})
+
+simulation <- as.data.frame(t(simulation)) # The t transposes, or flips, the rows and columns
+
+
+simulation <- simulation %>% 
+  dplyr::mutate(sharpe_ratio = (return - r_f) / sd) # Calculating the sharpe ratio to every portfolio simulation
+
+best_sharpe_ratio <- simulation %>% 
+  dplyr::slice_max(order_by = sharpe_ratio, n = 1)
+
+mvp <- simulation %>% 
+  dplyr::slice_min(order_by = sd, n = 1) # Keeping the highest values of SD in every equity
+
+portfolio_exp_return <- mean(portfolio_wide$Portfolio_Return) * 52
+portfolio_exp_sd <- sd(portfolio_wide$Portfolio_Return) * sqrt(52)
+sharpe_ratio <- (portfolio_exp_return - r_f) / portfolio_exp_sd
+
+
+optimal_table <- dplyr::tibble(
+  sd = seq(from = 0, to = max(simulation$sd), length.out = 100),
+  return = best_sharpe_ratio$sharpe_ratio * sd + r_f
+)
+
+portfolio_table <- dplyr::tibble(
+  sd = portfolio_exp_sd,
+  return = portfolio_exp_return
+)
+
+
+simulation %>% ggplot2::ggplot(ggplot2::aes(x = sd, y = return, color = return)) +
+  ggplot2::geom_point(alpha = 0.3) + 
+  ggplot2::scale_color_viridis_c() +
+  ggplot2::geom_point(
+    data = best_sharpe_ratio,
+    ggplot2::aes(x = sd, y = return),
+    color = "orange",
+    size = 2
+  ) +
+  ggrepel::geom_text_repel(
+    data = best_sharpe_ratio,
+    ggplot2::aes(x = sd, y = return, label = "Optimal Portfolio"),
+    color = "black"
+  ) +
+  ggplot2::geom_line(
+    data = optimal_table,
+    ggplot2::aes(x = sd, y = return),
+    color = "orange"
+  ) +
+  ggplot2::geom_point(
+    data = portfolio_table,
+    ggplot2::aes(x = portfolio_exp_sd, y = portfolio_exp_return),
+    color = "palevioletred1",
+    size = 2
+  ) + 
+  ggrepel::geom_text_repel(
+    data = portfolio_table,
+    ggplot2::aes(x = portfolio_exp_sd, y = portfolio_exp_return, label = "Current Portfolio"),
+    color = "black"
+  ) +
+  ggplot2::labs(
+    title = "The Efficient Frontier",
+    x = "Annualized Standard Deviation (Risk)",
+    y = "Annualized Expected Log Return",
+    color = "Log Return"
+  ) +
+  ggplot2::theme(plot.title = element_text(hjust = 0.5))
+```
+
+# The List of Potential Equities
+
+The five equities that I have decided to assess are in the following table:
+
+```{r}
+dplyr::tibble(
+  Equity = c(
+    "Tesla",
+    "Enbridge",
+    "Amazon",
+    "Lockheed Martin Corp",
+    "BWX Technologies Inc."
+  ),
+  Ticker = c(
+    "TSLA",
+    "ENB",
+    "AMZN",
+    "LMT",
+    "BWXT"
+  ),
+  Description = c(
+    "Tesla manufactures and sells electric vehicles, along with energy generation and storage systems, worldwide",
+    "Enbridge is a Canadian company that provides energy resources to both the US and Canada to power their operations",
+    "Amazon is an online retail store with some physical stores worldwide, and an expansion into database services",
+    "Lockheed Martin is an aerospace and defence company that manufactures and sells weapons and vehicles worldwide",
+    "BWX manufactures and sells nuclear components worldwide, both to governments and commercial operations"
+  ),
+  Industry = c(
+    "Technology & Automotive industry",
+    "Energy industry",
+    "Technology & Consumer industry",
+    "Defense industry",
+    "Nuclear & Defence industry"
+  )
+) %>% 
+  gt::gt() %>% 
+  gt::tab_header(title = "The Potential Equities Table") %>% 
+  gt::tab_style(
+    style = cell_fill(color = "indianred"),
+    locations = cells_title(groups = "title")
+  ) %>% 
+  gt::tab_source_note(source_note = "(Yahoo Finance, n.d.)")
+```
+
+```{r}
+assessment_stocks <- c("TSLA", "ENB", "AMZN", "LMT", "BWXT")
+```
+
+```{r, warning=FALSE}
+# Grabing the assessment equity data
+assessment <- tidyquant::tq_get(
+  assessment_stocks,
+  from = Sys.Date() - lubridate::years(5),
+  to = Sys.Date(),
+  get = "stock.prices"
+) %>% 
+  dplyr::group_by(symbol) %>% 
+  tidyquant::tq_transmute(
+    mutate_fun = to.weekly
+  ) %>% 
+  dplyr::mutate(return_log = log(adjusted / dplyr::lag(adjusted))) %>% 
+  tidyr::drop_na()
+
+assessment_wide <- assessment %>% 
+  dplyr::select(date, symbol, return_log) %>% 
+  tidyr::pivot_wider(names_from = symbol, values_from = return_log)
+
+
+data_vix <- tidyquant::tq_get(
+  "^VIX",
+  from = Sys.Date() - lubridate::years(5),
+  to = Sys.Date(),
+  get = "stock.prices"
+) %>% 
+  dplyr::group_by(symbol) %>% 
+  tidyquant::tq_transmute(
+    mutate_fun = to.weekly
+  ) %>% 
+  dplyr::mutate(vix_return_log = log(adjusted / dplyr::lag(adjusted))) %>% 
+  tidyr::drop_na() %>% 
+  dplyr::rename(vix_adjusted = adjusted) %>%
+  dplyr::ungroup() %>% 
+  dplyr::select(date, vix_adjusted, vix_return_log)
+
+data_gspc <- tidyquant::tq_get(
+  "^GSPC",
+  from = Sys.Date() - lubridate::years(5),
+  to = Sys.Date(),
+  get = "stock.prices"
+) %>% 
+  dplyr::group_by(symbol) %>% 
+  tidyquant::tq_transmute(
+    mutate_fun = to.weekly
+  ) %>% 
+  dplyr::mutate(gspc_return_log = log(adjusted / dplyr::lag(adjusted))) %>% 
+  tidyr::drop_na() %>% 
+  dplyr::rename(gspc_adjusted = adjusted) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::select(date, gspc_adjusted, gspc_return_log)
+```
+
+```{r}
+technicals <- function(ticker, original = assessment, original_wide = assessment_wide, market_gspc = data_gspc, market_vix = data_vix){
+  
+  data_stock <- original %>% 
+    dplyr::filter(symbol == ticker) %>% 
+    dplyr::ungroup() %>% 
+    dplyr::arrange(date)
+  
+  # MACD
+  table <- TTR::MACD(
+    original_wide[[ticker]],
+    nFast = 12,
+    nSlow = 26,
+    nSig = 9,
+    maType = "EMA",
+    percent = FALSE
+    )
+  
+  table <- data_stock %>% 
+    dplyr::select(date, open, close, high, low, volume, return_log) %>% 
+    dplyr::left_join(
+      as.data.frame(table) %>%  # Converting back to a data frame table
+        dplyr::transmute(date = original_wide$date, macd, signal),
+      by = "date"
+      ) %>% 
+    dplyr::mutate(macd_hist = macd - signal)
+  
+  
+  # MFI
+  xts_tbl <- xts::xts(
+    x = data_stock %>% dplyr::select(open, high, low, close, volume),
+    order.by = data_stock$date
+    )
+
+  tech_mfi <- TTR::MFI(
+    HLC = xts_tbl[, c("high", "low", "close")],
+    volume = xts_tbl[, "volume"],
+    n = 14 # Using a 2 week period
+    )
+
+  tbl_mfi <- data.frame( 
+    date = zoo::index(tech_mfi),
+    zoo::coredata(tech_mfi)
+    )
+
+  table <- table %>% dplyr::left_join(tbl_mfi, by = "date")
+  
+  
+  # Rolling SD
+  table <- table %>% 
+    dplyr::mutate(
+      sd12 = slider::slide_dbl(
+        .x = return_log,
+        .f = sd,
+        .before = 12, # Looking 3 months back
+        .after = 0,
+        .complete = FALSE 
+        ) * sqrt(52)
+      ) # I didn't remove NAs b/c other technicals like MACD need long beg. periods, so it will remove a lot of data
+  
+  
+  # ^VIX and ^GSPC
+  table <- table %>% 
+    dplyr::left_join(market_vix, by = "date") %>% 
+    dplyr::left_join(market_gspc, by = "date")
+  
+  
+  
+  # Plotting the data
+  plot_return <- table %>% 
+    plotly::plot_ly(
+      x = ~date,
+      y = ~return_log,
+      type = "scatter",
+      mode = "lines"
+    ) %>% 
+    plotly::style(name = "Log Return") # For the trace legend when using subplot
+
+  plot_macd <- table %>%
+    plotly::plot_ly(x = ~date) %>% 
+    plotly::add_lines(x = ~date, y = ~macd, name = "MACD") %>% 
+    plotly::add_lines(x = ~date, y = ~signal, name = "Signal")
+  
+  plot_sd12 <- table %>%
+    plotly::plot_ly(
+      x = ~date,
+      y = ~sd12,
+      type = "scatter",
+      mode = "lines"
+      ) %>%  
+    plotly::style(name = "Rolling SD (12)")
+  
+  plot_mfi <- table %>% 
+    plotly::plot_ly(
+      x = ~date,
+      y = ~mfi,
+      type = "scatter",
+      mode = "lines"
+    ) %>%  
+    plotly::style(name = "MFI")
+  
+  plot_mkt <- table %>% 
+    plotly::plot_ly(x = ~date) %>%
+    plotly::add_lines(x = ~date, y = ~return_log, name = "Log Returns") %>% 
+    plotly::add_lines(x = ~date, y = ~gspc_return_log, name = "S&P 500")
+  
+  plot_vix <- table %>% 
+    plotly::plot_ly(
+      x = ~date,
+      y = ~vix_adjusted,
+      type = "scatter",
+      mode = "lines"
+    ) %>%  
+    plotly::style(name = "VIX")
+  
+  
+  plot_all_tech <- plotly::subplot(
+    plot_return,
+    plot_macd,
+    plot_sd12,
+    plot_mfi,
+    nrows = 4,
+    heights = c(0.30, 0.30, 0.20, 0.20), # Top plot get 25% of height, 2nd 25%, 3rd 25%, and bottom plot gets 25%
+    shareX = TRUE,
+    titleX = TRUE
+    ) %>% 
+    plotly::layout(
+      title = list(text = paste(ticker, "Time Series by Week")),
+      xaxis = list(title = "Date"),
+      yaxis = list(title = "Log Return", titlefont = list(size = 12)),
+      yaxis2 = list(title = "EMA", titlefont = list(size = 10)),
+      yaxis3 = list(title = "Standard Deviation", titlefont = list(size = 10)),
+      yaxis4 = list(title = "Momentum", titlefont = list(size = 10))
+      )
+  
+  
+  plot_all_mkt <- plotly::subplot(
+    plot_mkt,
+    plot_vix,
+    nrows = 2,
+    heights = c(0.55, 0.45),
+    shareX = TRUE,
+    titleX = TRUE
+    ) %>% 
+    plotly::layout(
+      title = list(text = paste(ticker, "Time Series by Week")),
+      xaxis = list(title = "Date"),
+      yaxis = list(title = "Log Return", titlefont = list(size = 12)),
+      yaxis2 = list(title = "Value", titlefont = list(size = 10))
+      )
+  
+  return(list(table = table, plot_stock = plot_all_tech, plot_market = plot_all_mkt))
+}
+```
+
+```{r}
+x <- technicals("LMT")
+
+x$plot_stock
+```
+
+```{r}
+x$plot_stock
+```
+
+```{r}
+x$plot_market
+```
+
+```{r}
+assessment %>% 
+  ggplot2::ggplot(ggplot2::aes(x = date, y = return_log)) +
+  ggplot2::geom_line(ggplot2::aes(color = symbol), size = 1, alpha = 0.8) +
+  ggplot2::geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5) + 
+  ggplot2::facet_wrap(~symbol, scales = "free_y", ncol = 3) +
+  ggplot2::labs(
+    title = "Equity Time Series Plot",
+    x = "Date",
+    y = "Log Return"
+  ) +
+  ggplot2::theme(
+    plot.title = ggplot2::element_text(hjust = 0.5)
+    )
+```
+
+```{r}
+tidyquant::tq_transmute_fun_options()
+```
+
+1.  Predictive modeling
+    -   Future returns
+
+    -   Probability of outperforming
+2.  Financial news sentiment
+    -   Does news impact returns?
+3.  Risk / diversification
+    -   Correlation with portfolio
+
+    -   Volatility impact
+4.  Feature relationships
+    -   Non-linear effects (spilnes)
+
+    -   Seasonality?
+
+    -   PCA for dimentionality reduction
+
+When adding the new company, I want to increase the expected return of the portfolio and decrease the risk (SD) as much as possible, but it's okay if it increases a little bit if the return increases a lot more.
+
+Check for correlation of the company's return with the portfolio's return.
+
+-   The smaller the greater risk reduction
+
+We should choose the portfolio by seeing if its CAL is the steepest, so using the sharpe ratio which is the slope equation for that line.
+
+To incorporate the financial news sentiment we can convert text news to numbers and then define what's good news what's bad news take the proportion of each one and use them as predictors for the model
+
+# Predictors:
+
+Technical:
+
+-   Moving average (MACD)
+
+-   MFI
+
+-   Rolling volatility
+
+-   Past returns 1 week
+
+-   Past returns 4 week
+
+Market:
+
+-   Market return
+
+-   VIX
+
+Financial News:
+
+-   Avg. news 7 days
+
+-   Avg. news 30 days
+
+-   Headline count 7 days
+
+-   Negative ratio 7 days
+
+I need to scrape the risk free rate for the Capital Market Line for the optimal portfolio
