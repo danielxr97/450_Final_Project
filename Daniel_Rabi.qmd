@@ -106,6 +106,7 @@ library(TTR)
 library(plotly)
 library(xts)
 library(zoo)
+library(slider)
 library(jsonlite)
 ```
 
@@ -345,40 +346,57 @@ dplyr::tibble(
   )
 ```
 
-```{r}
+```{r, eval=FALSE}
 options(mc.cores = parallel::detectCores()) # Utilizing all the cores
 
+# Dynamic Webscraping
 Sys.setenv(PATH = paste(Sys.getenv("PATH"), "C:/Program Files/nodejs", sep=";"))
 
-# TSLA
+# TSLA News
 out_tsla <- system("node ./scripts/TSLA/news_tsla.js", intern = TRUE)
-
 txt_tsla <- paste(readLines("./scripts/TSLA/articles_tsla.json", warn = FALSE), collapse = "\n")
+
+# ENB News
+out_enb <- system("node ./scripts/ENB/news_enb.js", intern = TRUE)
+txt_enb <- paste(readLines("./scripts/ENB/articles_enb.json", warn = FALSE), collapse = "\n")
+
+# AMZN News
+out_amzn <- system("node ./scripts/AMZN/news_amzn.js", intern = TRUE)
+txt_amzn <- paste(readLines("./scripts/AMZN/articles_amzn.json", warn = FALSE), collapse = "\n")
+
+# LMT News
+out_lmt <- system("node ./scripts/LMT/news_lmt.js", intern = TRUE)
+txt_lmt <- paste(readLines("./scripts/LMT/articles_lmt.json", warn = FALSE), collapse = "\n")
+
+# BWXT News
+out_bwxt <- system("node ./scripts/BWXT/news_bwxt.js", intern = TRUE)
+txt_bwxt <- paste(readLines("./scripts/BWXT/articles_bwxt.json", warn = FALSE), collapse = "\n")
+
+# Market News
+out_market <- system("node ./scripts/Market/news_market.js", intern = TRUE)
+txt_market <- paste(readLines("./scripts/Market/articles_market.json", warn = FALSE), collapse = "\n")
+```
+
+```{r}
+# Assigning scraped text from the saved JSON file
+
+# TSLA News
 news_tsla <- jsonlite::fromJSON(txt_tsla)
 
-# ENB
-out_enb <- system("node ./scripts/ENB/news_enb.js", intern = TRUE)
-
-txt_enb <- paste(readLines("./scripts/ENB/articles_enb.json", warn = FALSE), collapse = "\n")
+# ENB News
 news_enb <- jsonlite::fromJSON(txt_enb)
 
-# AMZN
-out_amzn <- system("node ./scripts/AMZN/news_amzn.js", intern = TRUE)
-
-txt_amzn <- paste(readLines("./scripts/AMZN/articles_amzn.json", warn = FALSE), collapse = "\n")
+# AMZN News
 news_amzn <- jsonlite::fromJSON(txt_amzn)
 
-# LMT
-out_lmt <- system("node ./scripts/LMT/news_lmt.js", intern = TRUE)
-
-txt_lmt <- paste(readLines("./scripts/LMT/articles_lmt.json", warn = FALSE), collapse = "\n")
+# LMT News
 news_lmt <- jsonlite::fromJSON(txt_lmt)
 
-# BWXT
-out_bwxt <- system("node ./scripts/BWXT/news_bwxt.js", intern = TRUE)
-
-txt_bwxt <- paste(readLines("./scripts/BWXT/articles_bwxt.json", warn = FALSE), collapse = "\n")
+# BWXT News
 news_bwxt <- jsonlite::fromJSON(txt_bwxt)
+
+# Market News
+news_market <- jsonlite::fromJSON(txt_market)
 ```
 
 ```{r}
@@ -605,26 +623,6 @@ x$plot_stock
 
 ```{r}
 x$plot_market
-```
-
-```{r}
-assessment %>% 
-  ggplot2::ggplot(ggplot2::aes(x = date, y = return_log)) +
-  ggplot2::geom_line(ggplot2::aes(color = symbol), size = 1, alpha = 0.8) +
-  ggplot2::geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5) + 
-  ggplot2::facet_wrap(~symbol, scales = "free_y", ncol = 3) +
-  ggplot2::labs(
-    title = "Equity Time Series Plot",
-    x = "Date",
-    y = "Log Return"
-  ) +
-  ggplot2::theme(
-    plot.title = ggplot2::element_text(hjust = 0.5)
-    )
-```
-
-```{r}
-tidyquant::tq_transmute_fun_options()
 ```
 
 1.  Predictive modeling
