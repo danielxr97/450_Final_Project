@@ -8,9 +8,8 @@ editor: visual
 embed-resources: true
 bibliography: references/references.bib
 csl: references/apa.csl
-#output-file: index
-nocite: |
-  @YahooFinance
+output-file: index
+nocite: "@YahooFinance, @Gratton_2025, @Dolan_2025, @Kuepper_2025"
 
 echo: FALSE
 message: FALSE
@@ -85,7 +84,7 @@ dplyr::tibble(
 
 ## The Portfolio's Efficient Frontier
 
-The efficient frontier is the set of portfolios plotted against their levels of risk and expected return [@Investopedia_2025]. Therefore, @Investopedia_2025 suggests that a portfolio is efficient if it provides the highest return for a given level of risk. However, to find the optimal portfolio, we need to identify the line with the highest Sharpe Ratio (slope) on the efficient frontier [@Vipond_2020].
+The efficient frontier is the set of portfolios plotted against their levels of risk and expected return [@Ganti_2025]. Therefore, @Ganti_2025 suggests that a portfolio is efficient if it provides the highest return for a given level of risk. However, to find the optimal portfolio, we need to identify the line with the highest Sharpe Ratio (slope) on the efficient frontier [@Vipond_2020].
 
 The Sharpe Ratio equation:
 
@@ -107,6 +106,7 @@ library(TTR)
 library(plotly)
 library(xts)
 library(zoo)
+library(jsonlite)
 ```
 
 ```{r}
@@ -299,6 +299,86 @@ dplyr::tibble(
     locations = cells_title(groups = "title")
   ) %>% 
   gt::tab_source_note(source_note = "(Yahoo Finance, n.d.)")
+```
+
+# The Predictors
+
+To fairly assess each equity, I aim to estimate where each equity is heading one week ahead. Therefore, I use the following predictors to estimate next week's log returns for each equity.
+
+It is important to note that, for sentiment analysis, I selected specific lexicons for each equity, since they are scattered across different industries and sectors, which means that the same news could be long for one and short for the other.
+
+```{r}
+dplyr::tibble(
+  Predictor = c(
+    "Historical Log Returns",
+    "MACD",
+    "MFI",
+    "Rolling SD (12)",
+    "S&P 500",
+    "VIX",
+    "Positive News"
+  ),
+  Classification = c(
+    "Technicals",
+    "Technicals",
+    "Technicals",
+    "Technicals",
+    "Market",
+    "Market",
+    "Financial News Sentiment"
+  ),
+  Description = c(
+    "Captures short-term momentum and trend of the time series",
+    "The Moving Average Convergence Divergence helps identify and measure trends in price and momentum, and to identify entry and exit points (Dolan, 2025).",
+    "Analyzes price movements and trading volumes to measure the flow of money into and out of an asset (Gratton, 2025).",
+    "Using a moving standard deviation of the previous 12 weeks helps smooth out random spikes and capture short-term market transitions.",
+    'Using "^GSPC" rather than "SPY" provides a direct comparison to the market, allowing capture of overall market movements and isolation of stock-specific returns.',
+    "The Volatility Index, or the Fear Index, measures expected market volatility and is used to evaluate market sentiment and perceived risk (Kuepper, 2025).",
+    "Measures the tone of financial news, where positive sentiment may signal investor optimism and future price increases by using specific lexicons for each equity."
+  )
+) %>% 
+  gt::gt() %>% 
+  gt::tab_header(title = "The Predictors Table") %>% 
+  gt::tab_style(
+    style = cell_fill(color = "indianred"),
+    locations = cells_title(groups = "title")
+  )
+```
+
+```{r}
+options(mc.cores = parallel::detectCores()) # Utilizing all the cores
+
+Sys.setenv(PATH = paste(Sys.getenv("PATH"), "C:/Program Files/nodejs", sep=";"))
+
+# TSLA
+out_tsla <- system("node ./scripts/TSLA/news_tsla.js", intern = TRUE)
+
+txt_tsla <- paste(readLines("./scripts/TSLA/articles_tsla.json", warn = FALSE), collapse = "\n")
+news_tsla <- jsonlite::fromJSON(txt_tsla)
+
+# ENB
+out_enb <- system("node ./scripts/ENB/news_enb.js", intern = TRUE)
+
+txt_enb <- paste(readLines("./scripts/ENB/articles_enb.json", warn = FALSE), collapse = "\n")
+news_enb <- jsonlite::fromJSON(txt_enb)
+
+# AMZN
+out_amzn <- system("node ./scripts/AMZN/news_amzn.js", intern = TRUE)
+
+txt_amzn <- paste(readLines("./scripts/AMZN/articles_amzn.json", warn = FALSE), collapse = "\n")
+news_amzn <- jsonlite::fromJSON(txt_amzn)
+
+# LMT
+out_lmt <- system("node ./scripts/LMT/news_lmt.js", intern = TRUE)
+
+txt_lmt <- paste(readLines("./scripts/LMT/articles_lmt.json", warn = FALSE), collapse = "\n")
+news_lmt <- jsonlite::fromJSON(txt_lmt)
+
+# BWXT
+out_bwxt <- system("node ./scripts/BWXT/news_bwxt.js", intern = TRUE)
+
+txt_bwxt <- paste(readLines("./scripts/BWXT/articles_bwxt.json", warn = FALSE), collapse = "\n")
+news_bwxt <- jsonlite::fromJSON(txt_bwxt)
 ```
 
 ```{r}
