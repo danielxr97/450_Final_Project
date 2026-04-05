@@ -318,8 +318,7 @@ dplyr::tibble(
     "MFI",
     "Rolling SD (12)",
     "S&P 500",
-    "VIX",
-    "Positive News"
+    "VIX"
   ),
   Classification = c(
     "Technicals",
@@ -327,8 +326,7 @@ dplyr::tibble(
     "Technicals",
     "Technicals",
     "Market",
-    "Market",
-    "Financial News Sentiment"
+    "Market"
   ),
   Description = c(
     "Captures short-term momentum and trend of the time series",
@@ -336,8 +334,7 @@ dplyr::tibble(
     "Analyzes price movements and trading volumes to measure the flow of money into and out of an asset (Gratton, 2025).",
     "Using a moving standard deviation of the previous 12 weeks helps smooth out random spikes and capture short-term market transitions.",
     'Using "^GSPC" rather than "SPY" provides a direct comparison to the market, allowing capture of overall market movements and isolation of stock-specific returns.',
-    "The Volatility Index, or the Fear Index, measures expected market volatility and is used to evaluate market sentiment and perceived risk (Kuepper, 2025).",
-    "Measures the tone of financial news, where positive sentiment may signal investor optimism and future price increases by using specific lexicons for each equity."
+    "The Volatility Index, or the Fear Index, measures expected market volatility and is used to evaluate market sentiment and perceived risk (Kuepper, 2025)."
   )
 ) %>% 
   gt::gt() %>% 
@@ -347,6 +344,8 @@ dplyr::tibble(
     locations = cells_title(groups = "title")
   )
 ```
+
+Financial News Sentiment: Measures the tone of financial news, where positive sentiment may signal investor optimism and future price increases by using specific lexicons for each equity.
 
 ```{r}
 options(mc.cores = parallel::detectCores()) # Utilizing all the cores
@@ -574,14 +573,14 @@ sentiment_analysis <- function(data){
     ) %>% 
     dplyr::mutate(net_loughran = positive - negative)
   
-  loughran <- sum(loughran$net_loughran)
+  loughran_score <- sum(loughran$net_loughran) / nrow(data)
   
   # The AFINN Sentiment
   afinn <- data %>% 
     dplyr::inner_join(afinn, by = "word") %>%
     dplyr::rename(net_afinn = value)
   
-  afinn <- sum(afinn$net_afinn)
+  afinn_score <- sum(afinn$net_afinn) / nrow(data)
   
   # The NRC Sentiment
   nrc <- data %>% 
@@ -595,21 +594,35 @@ sentiment_analysis <- function(data){
     ) %>% 
     dplyr::mutate(total = positive + joy + trust + anticipation - fear - sadness - anger - disgust - negative)
   
-  nrc <- sum(nrc$total)
+  nrc_score <- sum(nrc$total) / nrow(data)
   
   # Calculation
-  score <- 0.85 * loughran + 0.1 * afinn + 0.05 * nrc
+  score <- 0.85 * loughran_score + 0.1 * afinn_score + 0.05 * nrc_score
 
   interpretation <- dplyr::case_when(
-    score > 5 ~ "Strong Positive",
-    score > 0 ~ "Positive",
-    score == 0 ~ "Neutral",
-    score < -5 ~ "Strong Negative",
-    score < 0 ~ "Negative"
+    score >= 0.025981 ~ "Strong Positive", # Above the 3rd quartile
+    score >= 0.012856 ~ "Positive", # Between the Median and 3rd qurtile
+    score >= 0.004982 ~ "Mild Positive", # Between the 1st quartile and the Median
+    TRUE ~ "Weak Positive"
   )
   
   return(list(score = score, inter = interpretation))
 }
+```
+
+```{r, warning=FALSE}
+sentiment_analysis(clean_enb)
+
+
+scores <- c(
+  sentiment_analysis(clean_tsla)$score,
+  sentiment_analysis(clean_enb)$score,
+  sentiment_analysis(clean_amzn)$score,
+  sentiment_analysis(clean_lmt)$score,
+  sentiment_analysis(clean_bwxt)$score
+)
+
+summary(scores)
 ```
 
 ```{r}
@@ -634,7 +647,7 @@ news_amzn %>%
   tidyr::unite(word, w1, w2, sep = " ") %>% 
   dplyr::filter(!word %in% remove_bigram_amzn) %>% 
   dplyr::count(word, sort = TRUE) %>% 
-  dplyr::top_n(15) %>% 
+  dplyr::top_n(5) %>% 
   ggplot2::ggplot(ggplot2::aes(x = stats::reorder(word, n), y = n, fill = word)) +
   ggplot2::geom_bar(stat = "identity") +
   ggplot2::coord_flip() +
@@ -894,35 +907,3 @@ Check for correlation of the company's return with the portfolio's return.
 We should choose the portfolio by seeing if its CAL is the steepest, so using the sharpe ratio which is the slope equation for that line.
 
 To incorporate the financial news sentiment we can convert text news to numbers and then define what's good news what's bad news take the proportion of each one and use them as predictors for the model
-
-# Predictors:
-
-Technical:
-
--   Moving average (MACD)
-
--   MFI
-
--   Rolling volatility
-
--   Past returns 1 week
-
--   Past returns 4 week
-
-Market:
-
--   Market return
-
--   VIX
-
-Financial News:
-
--   Avg. news 7 days
-
--   Avg. news 30 days
-
--   Headline count 7 days
-
--   Negative ratio 7 days
-
-I need to scrape the risk free rate for the Capital Market Line for the optimal portfolio
