@@ -108,6 +108,8 @@ library(xts)
 library(zoo)
 library(slider)
 library(jsonlite)
+library(tidytext)
+library(stringr)
 ```
 
 ```{r}
@@ -346,57 +348,298 @@ dplyr::tibble(
   )
 ```
 
-```{r, eval=FALSE}
+```{r}
 options(mc.cores = parallel::detectCores()) # Utilizing all the cores
 
 # Dynamic Webscraping
 Sys.setenv(PATH = paste(Sys.getenv("PATH"), "C:/Program Files/nodejs", sep=";"))
 
 # TSLA News
-out_tsla <- system("node ./scripts/TSLA/news_tsla.js", intern = TRUE)
+#out_tsla <- system("node ./scripts/TSLA/news_tsla.js", intern = TRUE)
 txt_tsla <- paste(readLines("./scripts/TSLA/articles_tsla.json", warn = FALSE), collapse = "\n")
 
 # ENB News
-out_enb <- system("node ./scripts/ENB/news_enb.js", intern = TRUE)
+#out_enb <- system("node ./scripts/ENB/news_enb.js", intern = TRUE)
 txt_enb <- paste(readLines("./scripts/ENB/articles_enb.json", warn = FALSE), collapse = "\n")
 
 # AMZN News
-out_amzn <- system("node ./scripts/AMZN/news_amzn.js", intern = TRUE)
+#out_amzn <- system("node ./scripts/AMZN/news_amzn.js", intern = TRUE)
 txt_amzn <- paste(readLines("./scripts/AMZN/articles_amzn.json", warn = FALSE), collapse = "\n")
 
 # LMT News
-out_lmt <- system("node ./scripts/LMT/news_lmt.js", intern = TRUE)
+#out_lmt <- system("node ./scripts/LMT/news_lmt.js", intern = TRUE)
 txt_lmt <- paste(readLines("./scripts/LMT/articles_lmt.json", warn = FALSE), collapse = "\n")
 
 # BWXT News
-out_bwxt <- system("node ./scripts/BWXT/news_bwxt.js", intern = TRUE)
+#out_bwxt <- system("node ./scripts/BWXT/news_bwxt.js", intern = TRUE)
 txt_bwxt <- paste(readLines("./scripts/BWXT/articles_bwxt.json", warn = FALSE), collapse = "\n")
 
 # Market News
-out_market <- system("node ./scripts/Market/news_market.js", intern = TRUE)
+#out_market <- system("node ./scripts/Market/news_market.js", intern = TRUE)
 txt_market <- paste(readLines("./scripts/Market/articles_market.json", warn = FALSE), collapse = "\n")
 ```
 
 ```{r}
 # Assigning scraped text from the saved JSON file
-
-# TSLA News
 news_tsla <- jsonlite::fromJSON(txt_tsla)
-
-# ENB News
 news_enb <- jsonlite::fromJSON(txt_enb)
-
-# AMZN News
 news_amzn <- jsonlite::fromJSON(txt_amzn)
-
-# LMT News
 news_lmt <- jsonlite::fromJSON(txt_lmt)
-
-# BWXT News
 news_bwxt <- jsonlite::fromJSON(txt_bwxt)
-
-# Market News
 news_market <- jsonlite::fromJSON(txt_market)
+
+# Sentiments
+loughran <- tidytext::get_sentiments("loughran")
+afinn <- tidytext::get_sentiments("afinn")
+nrc <- tidytext::get_sentiments("nrc")
+```
+
+```{r}
+# Cleaning function
+clean_text <- function(data){
+  x <- data %>% 
+    dplyr::mutate(
+      text = tolower(text), # Converting everything to lowercase
+      text = gsub(pattern = "'s", replacement = "", text), # Removing 's
+      text = gsub(pattern = "[^a-z\\s]", replacement = " ", text), # Removing everything that's not letters: a-z ; spaces: \\s
+      text = stringr::str_squish(text) # Removing leading and trailing spaces
+      )
+  
+  return(x)
+}
+
+# Text removal function
+text_rm <- function(data, remove){
+  x <- data %>% 
+    dplyr::mutate(
+      text = gsub(pattern = remove, replacement = "", text, ignore.case = TRUE) # A substitution method
+    )
+  
+  return(x)
+}
+```
+
+```{r}
+# TSLA
+remove_tsla <- c(
+  "tesla", "tsla", "spacex", "ubtech", "rivian", "company", "companies", "firm", "business", "stock", "stocks", "market", "markets", "investor", "investors", "trade", "trading", "shares", "price", "news", "said", "says", "report", "reports", "according", "reuters", "briefing", "morning", "update", "march", "april", "year", "today", "week", "previously", "earlier", "latest", "trump", "president", "war", "tariffs", "policy", "china", "iran", "global", "expected", "growth", "data", "term", "billion", "million", "energy", "nasdaq", "thursday", "including", "article", "wall", "key", "major", "appeared", "analyst", "guruocus", "xai", "tbpn", "gurufocus", "free", "warning", "community", "change", "deployments", "billions", "millions"
+  ) # After inspecting the URL link I removed common finance words that could appear in any article and redundant words
+
+clean_tsla <- news_tsla %>%
+  clean_text() %>% 
+  dplyr::select(article_num, text) %>% 
+  tidytext::unnest_tokens(output = word, input = text) %>% 
+  dplyr::anti_join(stop_words, by = c("word")) %>% 
+  dplyr::filter(
+    stringr::str_length(word) > 2,
+    !word %in% remove_tsla
+  )
+
+# ENB
+remove_enb <- c(
+  "free", "community", "news", "said", "report", "reports", "according", "reuters", "article", "stock", "stocks", "buy", "hold", "investor", "investors", "canadian", "tfsa", "rrsp", "top", "best", "why", "keep", "eye", "built", "right", "now", "including", "based", "around", "well", "still", "also", "analysis", "story", "stock", "stocks", "share", "price", "current", "investors", "company", "companies", "market", "enbridge", "enb", "tsx", "fool", "motley", "term", "time", "past", "list","business", "assets", "portfolio", "canada", "billions", "billion", "millions", "zacks", "makes", "nyse", "focused", "projects", "products", "enterprise", "stay", "model", "investment", "increased", "worth", "balance", "potential", "ability", "epd"
+  )
+
+clean_enb <- news_enb %>%
+  clean_text() %>% 
+  dplyr::select(article_num, text) %>% 
+  tidytext::unnest_tokens(output = word, input = text) %>% 
+  dplyr::anti_join(stop_words, by = c("word")) %>% 
+  dplyr::filter(
+    stringr::str_length(word) > 2,
+    !word %in% remove_enb
+  )
+
+# AMZN
+remove_amzn <- c(
+  "amazon", "amzn", "apple", "article", "analysis", "story", "stock", "stocks", "share", "price", "current", "investors", "company", "companies", "market", "narrative", "narratives", "based", "time", "analysis", "article", "story", "wall", "simply", "free", "top", "community", "globalstar", "term", "business", "analyst", "alternatively", "billions", "millions", "fair", "services", "buy", "potential", "valuation", "capital", "stake", "shares", "return", "retail", "margins", "financial", "deal", "data", "control", "support", "report", "past", "news", "nasdaq", "million", "dcf", "existing", "iphone", "satellite", "aws", "cloud", "worth", "ratio", "position", "future", "industry", "emergency", "recent", "quarter", "kuper", "portfolio", "forward", "head", "compared", "advertising", "moves", "billionaire", "businesses", "commentary", "directly", "estimate", "driven", "note", "infrastructure", "kuiper", "sits", "margins", "focused", "key", "discover", "platform", "reported", "features", "include", "sell", "investment", "tech", "power", "partnerships"
+  )
+
+remove_bigram_amzn <- c(
+  "simply wall", "wall st", "data note", "cash flows", "current share", "share price", "nasdaq amzn", "million shares", "project kuiper", "historical data", "fundamental data", "financial situation", "financial advice", "team simplywallst", "research report", "qualitative material", "provide commentary", "email editorial", "editorial team", "stay updated", "sits alongside", "news stories", "unbiased methodology", "fair ratio", "multiline retail", "million individual", "past week", "nasdaqs aapl", "nasdaqs aapl", "nasdaqgs aapl", "iphone models", "assumes fair", "gains control", "low earth", "earth orbit"
+  )
+
+clean_amzn <- news_amzn %>%
+  clean_text() %>% 
+  dplyr::select(article_num, text) %>% 
+  tidytext::unnest_tokens(output = word, input = text) %>% 
+  dplyr::mutate(
+    word = dplyr::case_when(
+      word == "flows" ~ "flow",
+      word == "risks" ~ "risk",
+      word == "profit" ~ "earnings",
+      TRUE ~ word
+      )
+    ) %>% 
+  dplyr::anti_join(stop_words, by = c("word")) %>% 
+  dplyr::filter(
+    stringr::str_length(word) > 2,
+    !word %in% remove_amzn
+  )
+
+# LMT
+remove_lmt <- c(
+  "free", "community", "news", "said", "report", "reports", "according", "reuters", "article", "stock", "stocks", "buy", "hold", "investor", "investors", "canadian", "tfsa", "rrsp", "top", "best", "why", "keep", "eye", "built", "right", "now", "including", "based", "around", "well", "still", "also", "analysis", "story", "stock", "stocks", "share", "price", "current", "investors", "company", "companies", "market", "billions", "billion", "millions", "martin", "lockheed", "lmt", "trump", "nasa", "nyse", "artemis", "orion", "redwire", "production", "program", "programs", "system", "systems", "support", "term", "narrative", "increase", "space", "launch", "lunar", "zacks", "wall", "trillion", "simply", "moon", "president", "analysts", "crewed", "march", "center", "rtx", "worth", "past", "future", "operations", "data", "research", "key", "efforts", "expanding", "infrastructure", "financial", "human", "hardware", "spacecraft", "navigation", "discretionary", "critical", "exposure", "momentum", "airbus", "building", "businesses", "camera", "corporation", "capacity", "white", "portfolio", "noc", "iran", "include", "department", "directly", "house", "time", "successful", "world", "sun", "shares", "return", "rate", "yield", "sensors", "manufacturing", "integration", "imaging", "facility", "exploration", "friday", "government", "deep", "domestic"
+  )
+
+clean_lmt <- news_lmt %>%
+  clean_text() %>% 
+  dplyr::select(article_num, text) %>% 
+  tidytext::unnest_tokens(output = word, input = text) %>% 
+  dplyr::mutate(
+    word = dplyr::case_when(
+      word == "investments" ~ "investment",
+      TRUE ~ word
+      )
+    ) %>%
+  dplyr::anti_join(stop_words, by = c("word")) %>% 
+  dplyr::filter(
+    stringr::str_length(word) > 2,
+    !word %in% remove_lmt
+  )
+
+# BWXT
+remove_bwxt <- c(
+  "free", "community", "news", "said", "report", "reports", "according", "reuters", "article", "stock", "stocks", "buy", "hold", "investor", "investors", "canadian", "tfsa", "rrsp", "top", "best", "why", "keep", "eye", "built", "right", "now", "including", "based", "around", "well", "still", "also", "analysis", "story", "stock", "stocks", "share", "price", "current", "investors", "company", "companies", "market", "billions", "millions", "analysts", "bwx", "bwxt", "fair", "million", "zacks", "billion", "flr", "wall", "earth", "guidance", "commercial", "term", "simply", "clean", "days", "narrative", "projects", "business", "components", "services", "financial", "valuation", "estimate", "systems", "communication", "supply", "chain", "government", "time", "data", "contract", "publisher", "rank", "model", "access", "expected", "advanced", "results", "operations", "materials", "realoys", "oilprice", "technologies", "realaloys", "fluor", "contracts", "shares", "technology", "information", "project", "programs", "facility", "potential", "narratives", "global", "future", "analyst", "attention", "smr", "past", "program", "reactor", "propulsion", "visteon", "scale", "ceg", "ratio", "eps", "platforms", "facilities", "realaloys", "ceo", "capital", "constellation", "worth", "recent", "realloys", "consensus", "margins", "position", "markets"
+  )
+
+clean_bwxt <- news_bwxt %>%
+  clean_text() %>% 
+  dplyr::select(article_num, text) %>%
+  tidytext::unnest_tokens(output = word, input = text) %>% 
+  dplyr::mutate(
+    word = dplyr::case_when(
+      word == "growing" ~ "growth",
+      word == "contracts" ~ "contract",
+      word == "narratives" ~ "narrative",
+      word == "programs" ~ "program",
+      TRUE ~ word
+      )
+    ) %>% 
+  dplyr::anti_join(stop_words, by = c("word")) %>% 
+  dplyr::filter(
+    stringr::str_length(word) > 2,
+    !word %in% remove_bwxt
+  )
+
+# Market
+remove_market <- c(
+  "free", "community", "yahoo", "read", "click", "follow", "news", "stock", "stocks", "market", "markets", "price", "prices", "finance", "financial", "business", "company", "companies", "president", "age", "social", "security", "retirement", "whoop", "trump", "iran", "global", "million", "street", "month", "wrote", "world", "quarter", "musk", "billion", "ceo", "analyst", "spacex", "wall", "tesla", "start", "reporter", "middle", "hill", "wednesday", "america", "analysis", "americans", "said", "says", "told", "added", "noted", "according", "year", "week", "day", "time", "today", "last", "new", "data", "report", "note", "expected", "estimate", "forecast", "country", "countries", "global", "economy", "economic", "hamza", "ines", "ferre", "nike", "pvt", "strait", "hormuz", "east", "major", "recent", "public", "moving", "events", "biggest", "impact", "top", "cut", "hit", "rising", "ahmed", "depth", "benefit", "concerns", "gulf", "march", "tuesday", "delta", "airlines", "infrastructure", "product", "monthly", "months", "analysts", "aren", "senior", "expectations", "investors", "health", "weeks", "space", "investing", "round", "ipo"
+  )
+
+clean_market <- news_market %>%
+  clean_text() %>% 
+  dplyr::select(article_num, text) %>% 
+  tidytext::unnest_tokens(output = word, input = text) %>%
+  dplyr::mutate(
+    word = dplyr::case_when(
+      word == "growing" ~ "growth",
+      word == "contracts" ~ "contract",
+      word == "narratives" ~ "narrative",
+      word == "programs" ~ "program",
+      word == "money" ~ "capital",
+      word == "tariff" ~ "tariffs",
+      TRUE ~ word
+      )
+    ) %>%
+  dplyr::anti_join(stop_words, by = c("word")) %>% 
+  dplyr::filter(
+    stringr::str_length(word) > 2,
+    !word %in% remove_market
+  )
+```
+
+```{r}
+clean_market %>%
+  dplyr::count(word, sort = TRUE) %>% 
+  dplyr::top_n(20) %>% 
+  ggplot2::ggplot(ggplot2::aes(x = stats::reorder(word, n), y = n, fill = word)) +
+  ggplot2::geom_bar(stat = "identity") +
+  ggplot2::coord_flip() +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ggtitle("Most Used Words")
+```
+
+```{r, warning=FALSE}
+sentiment_analysis <- function(data){
+  # The Loughran Sentiment
+  loughran <- data %>% 
+    dplyr::inner_join(loughran, by = "word") %>% 
+    dplyr::rename(loughran = sentiment) %>% 
+    dplyr::count(article_num, loughran) %>% 
+    tidyr::pivot_wider(
+      names_from = loughran,
+      values_from = n,
+      values_fill = 0
+    ) %>% 
+    dplyr::mutate(net_loughran = positive - negative)
+  
+  loughran <- sum(loughran$net_loughran)
+  
+  # The AFINN Sentiment
+  afinn <- data %>% 
+    dplyr::inner_join(afinn, by = "word") %>%
+    dplyr::rename(net_afinn = value)
+  
+  afinn <- sum(afinn$net_afinn)
+  
+  # The NRC Sentiment
+  nrc <- data %>% 
+    dplyr::inner_join(nrc, by = "word") %>% 
+    dplyr::rename(nrc = sentiment) %>% 
+    dplyr::count(article_num, nrc) %>% 
+    tidyr::pivot_wider(
+      names_from = nrc,
+      values_from = n,
+      values_fill = 0
+    ) %>% 
+    dplyr::mutate(total = positive + joy + trust + anticipation - fear - sadness - anger - disgust - negative)
+  
+  nrc <- sum(nrc$total)
+  
+  # Calculation
+  score <- 0.85 * loughran + 0.1 * afinn + 0.05 * nrc
+
+  interpretation <- dplyr::case_when(
+    score > 5 ~ "Strong Positive",
+    score > 0 ~ "Positive",
+    score == 0 ~ "Neutral",
+    score < -5 ~ "Strong Negative",
+    score < 0 ~ "Negative"
+  )
+  
+  return(list(score = score, inter = interpretation))
+}
+```
+
+```{r}
+news_amzn %>% 
+  clean_text() %>% 
+  tidytext::unnest_tokens(
+    output = word,
+    input = text,
+    token = "ngrams",
+    n = 2
+  ) %>%
+  tidyr::separate(word, c("w1", "w2"), sep = " ") %>% 
+  dplyr::filter(
+    !w1 %in% stop_words$word,
+    !w2 %in% stop_words$word,
+    !w1 %in% remove_amzn,
+    !w2 %in% remove_amzn,
+    nchar(w1) > 2,
+    nchar(w2) > 2
+    ) %>% 
+  stats::na.omit() %>% 
+  tidyr::unite(word, w1, w2, sep = " ") %>% 
+  dplyr::filter(!word %in% remove_bigram_amzn) %>% 
+  dplyr::count(word, sort = TRUE) %>% 
+  dplyr::top_n(15) %>% 
+  ggplot2::ggplot(ggplot2::aes(x = stats::reorder(word, n), y = n, fill = word)) +
+  ggplot2::geom_bar(stat = "identity") +
+  ggplot2::coord_flip() +
+  ggplot2::theme(legend.position = "none") +
+  ggplot2::ggtitle("Most Used Words")
 ```
 
 ```{r}
