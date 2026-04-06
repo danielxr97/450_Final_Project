@@ -304,11 +304,11 @@ dplyr::tibble(
   gt::tab_source_note(source_note = "(Yahoo Finance, n.d.)")
 ```
 
-# The Predictors
+# Analysis Components
+
+## Technical Predictors
 
 To fairly assess each equity, I aim to estimate where each equity is heading one week ahead. Therefore, I use the following predictors to estimate next week's log returns for each equity.
-
-It is important to note that, for sentiment analysis, I selected specific lexicons for each equity, since they are scattered across different industries and sectors, which means that the same news could be long for one and short for the other.
 
 ```{r}
 dplyr::tibble(
@@ -345,7 +345,19 @@ dplyr::tibble(
   )
 ```
 
-Financial News Sentiment: Measures the tone of financial news, where positive sentiment may signal investor optimism and future price increases by using specific lexicons for each equity.
+## Financial News Sentiment
+
+Financial news sentiment measures the tone of financial news. Positive sentiment may signal investor optimism and future price increases, while negative sentiment signals uncertainty and a future price decrease. This sentiment analysis uses three specific lexicons for each equity:
+
+1.  **Loughran-McDonald:** According to @R_Project, the Loughran lexicon is created to interpret financial documents by labelling words into the following categories: negative, positive, litigious, uncertainty, constraining, and superfluous.
+2.  **AFINN:** According to @Ketchley_2023, AFINN captures valence, arousal, and dominance while providing a score to each word in accordance with those categories. The focus of this AFINN analysis is to capture the valence score for each word.
+3.  **NRC:** @Canada_2019 suggests that NRC is a collection of seven emotional word lexicons, with the aim of capturing the emotional tone of a text by categorizing words into categories such as positive, joy, trust, anticipation, fear, sadness, anger, disgust, negative, and surprise.
+
+To arrive at a unified sentiment score, I decided to take the weighted average of the sentiment scores, assigning Loughran 85%, AFINN 10%, and NRC 5%. Additionally, I used @YahooFinance articles as my source of financial news.
+
+$$
+\text{Sentiment} = \text{Loughran} \cdot 0.85 + \text{AFINN} \cdot 0.1 + \text{NRC} \cdot 0.05
+$$
 
 ```{r}
 options(mc.cores = parallel::detectCores()) # Utilizing all the cores
@@ -880,6 +892,20 @@ x$plot_stock
 ```{r}
 x$plot_market
 ```
+
+# The Analysis
+
+## Tesla
+
+## Enbridge
+
+## Amazon
+
+## Lockheed Martin
+
+## BWX Technologies
+
+# Conclusion
 
 1.  Predictive modeling
     -   Future returns
