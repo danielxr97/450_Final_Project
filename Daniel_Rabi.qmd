@@ -1221,9 +1221,7 @@ plot_enb <- portfolio_calc("ENB")
 plot_amzn <- portfolio_calc("AMZN")
 plot_lmt <- portfolio_calc("LMT")
 plot_bwxt <- portfolio_calc("BWXT")
-```
 
-```{r}
 plots_tbl <- dplyr::bind_rows(
   plot_tsla,
   plot_enb,
@@ -1300,28 +1298,18 @@ simulation %>% ggplot2::ggplot(ggplot2::aes(x = sd, y = return, color = return))
   ggplot2::theme(plot.title = element_text(hjust = 0.5))
 ```
 
-1.  Predictive modeling
-    -   Future returns
+As presented above, the best equity to add to the portfolio is Lockheed Martin (LMT). The portfolio with Lockheed Martin as an additional equity creates a sharpe ratio of 1.0267.
 
-    -   Probability of outperforming
-2.  Financial news sentiment
-    -   Does news impact returns?
-3.  Risk / diversification
-    -   Correlation with portfolio
-
-    -   Volatility impact
-4.  Feature relationships
-    -   Non-linear effects (spilnes)
-
-    -   Seasonality?
-
-    -   PCA for dimentionality reduction
-
-When adding the new company, I want to increase the expected return of the portfolio and decrease the risk (SD) as much as possible, but it's okay if it increases a little bit if the return increases a lot more.
-
-Check for correlation of the company's return with the portfolio's return.
-
--   The smaller the greater risk reduction
+```{r}
+plots_tbl %>%
+  dplyr::rename(
+    Equity = equity,
+    Return = return,
+    SD = sd,
+    `Sharpe Ratio` = sharpe_ratio
+  ) %>% 
+  gt()
+```
 
 We should choose the portfolio by seeing if its CAL is the steepest, so using the sharpe ratio which is the slope equation for that line.
 
