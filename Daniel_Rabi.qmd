@@ -84,7 +84,7 @@ dplyr::tibble(
 
 ## The Portfolio's Efficient Frontier
 
-The efficient frontier is the set of portfolios plotted against their levels of risk and expected return [@Ganti_2025]. Therefore, @Ganti_2025 suggests that a portfolio is efficient if it provides the highest return for a given level of risk. However, to find the optimal portfolio, we need to identify the line with the highest Sharpe Ratio (slope) on the efficient frontier [@Vipond_2020].
+The efficient frontier is the set of portfolios plotted against their levels of risk and expected return [@Ganti_2025]. Therefore, @Ganti_2025 suggests that a portfolio is efficient if it provides the highest return for a given level of risk. However, to find the optimal portfolio, we need to identify the line on, or above, the efficient frontier with the highest Sharpe Ratio (slope)[@Vipond_2020].
 
 The Sharpe Ratio equation:
 
@@ -96,7 +96,7 @@ Where:
 
 $r_f =$ The 10-year U.S. Treasury Bond [@FRED_2026]
 
-Currently, the Sharpe Ratio of the portfolio is 0.6812, while the optimal portfolio's Sharpe Ratio is 1.0872.
+Currently, the portfolio's Sharpe Ratio is 0.6812, while the optimal portfolio's Sharpe Ratio is 1.0872. As mentioned before, the goal is to achieve the most optimal portfolio by choosing one of the assessment equities, or not choosing any one of them.
 
 ```{r, message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -212,6 +212,7 @@ best_sharpe_ratio <- simulation %>%
 
 mvp <- simulation %>% 
   dplyr::slice_min(order_by = sd, n = 1) # Keeping the highest values of SD in every equity
+
 
 portfolio_exp_return <- mean(portfolio_wide$Portfolio_Return) * 52
 portfolio_exp_sd <- sd(portfolio_wide$Portfolio_Return) * sqrt(52)
@@ -971,7 +972,7 @@ model_ml <- function(ticker){
   forecast_bayes <- stats::predict(model_bayes, new_data = forecast_baked, type = "pred_int")
   
   # Calculating values for portfolio analysis
-  bayes_exp_return <- ((forecast_bayes$.pred_lower + forecast_bayes$.pred_upper) / 2)# Taking the middle value (or avg.)
+  bayes_exp_return <- ((forecast_bayes$.pred_lower + forecast_bayes$.pred_upper) / 2) # Taking the middle value (or avg.)
   bayes_exp_sd <- ((forecast_bayes$.pred_upper - forecast_bayes$.pred_lower) / 4) # Using 4 b/c of 95% confidence, so 4 SD difference
   
   # Saving values to a table
@@ -979,9 +980,9 @@ model_ml <- function(ticker){
     date = forecast_row$date + 7,
     pred_upper = forecast_bayes$.pred_upper,
     pred_lower = forecast_bayes$.pred_lower,
-    pred_mid = (forecast_bayes$.pred_upper + forecast_bayes$.pred_lower) / 2,
+    pred_mid = bayes_exp_return, # Not annualized
     sd = bayes_exp_sd * sqrt(52),
-    return = bayes_exp_return * 52
+    return = bayes_exp_return * 52 # Annualized for the portfolio
   )
   
   
@@ -1245,17 +1246,21 @@ plot_bwxt$plot_return
 Using the forecasted return for each equity
 
 ```{r}
-# Portfolio calculation function
-portfolio_calc <- function(ticker, risk_free = r_f, port_long = portfolio, port_wide = portfolio_wide){
+optimal_port <- function(ticker, risk_free = r_f, port_long = portfolio, port_wide = portfolio_wide){
+  set.seed(123)
+  
+  # Setting up all the exp ann. returns for the portfolio
   port_stock <- c(
     nvda = mean(portfolio_wide$NVDA, na.rm = TRUE) * 52,
     ba = mean(portfolio_wide$BA, na.rm = TRUE) * 52,
     cvx = mean(portfolio_wide$CVX, na.rm = TRUE) * 52,
     ko = mean(portfolio_wide$KO, na.rm = TRUE) * 52,
     jpm = mean(portfolio_wide$JPM, na.rm = TRUE) * 52,
-    new_stock = model_ml(ticker)$exp_bayes_tbl$return
+    new_stock = model_ml(ticker)$exp_bayes_tbl$return # The annualized exp return
   )
   
+  
+  # Calculating the Covarince for the new portfolio
   new_stock_hist <- technicals(ticker)$table %>% 
     dplyr::select(date, return_log) %>% 
     dplyr::rename(new_stock = return_log)
@@ -1265,31 +1270,136 @@ portfolio_calc <- function(ticker, risk_free = r_f, port_long = portfolio, port_
     dplyr::left_join(new_stock_hist, by = "date") %>% 
     dplyr::select(-date)
   
-  port_cov <- stats::cov(port_hist, use = "complete.obs") * 52
+  annual_cov <- stats::cov(port_hist, use = "complete.obs") * 52
   
-  weights <- rep(1/6, 6)
   
-  port_return <- sum(weights * port_stock)
-  port_sd <- sqrt(as.numeric(t(weights) %*% port_cov %*% weights))
-  sharpe <- (port_return - risk_free) / port_sd
+  # Running simulation to find the optimal portfolio values
+  sim <- replicate(5000, {
+    rnd_vals <- runif(6)
+    weight <- rnd_vals / sum(rnd_vals)
+    
+    port_rets <- sum(weight * port_stock)
+    port_sd <- sqrt(sum(weight * (annual_cov %*% weight)))
+    
+    c(
+      NVDA = weight[1],
+      BA = weight[2],
+      CVX = weight[3],
+      KO = weight[4],
+      JPM = weight[5],
+      new_stock = weight[6],
+      return = port_rets,
+      sd = as.numeric(port_sd)
+    )
+  })
+  
+  sim <- as.data.frame(t(sim))
+  
+  sim <- sim %>% 
+    dplyr::mutate(sharpe_ratio = (return - risk_free) / sd)
+  
+  opt_port <- sim %>% 
+    dplyr::slice_max(order_by = sharpe_ratio, n = 1)
   
   port_tbl <- tibble::tibble(
     equity = ticker,
-    return = port_return,
-    sd = port_sd,
-    sharpe_ratio = sharpe
+    return = opt_port$return,
+    sd = opt_port$sd,
+    sharpe_ratio = opt_port$sharpe_ratio,
+    NVDA_w = opt_port$NVDA,
+    BA_w = opt_port$BA,
+    CVX_w = opt_port$CVX,
+    KO_w = opt_port$KO,
+    JPM_w = opt_port$JPM,
+    new_stock_w = opt_port$new_stock
   )
+  
   
   return(port_tbl)
 }
 ```
 
 ```{r}
-plot_tsla <- portfolio_calc("TSLA")
-plot_enb <- portfolio_calc("ENB")
-plot_amzn <- portfolio_calc("AMZN")
-plot_lmt <- portfolio_calc("LMT")
-plot_bwxt <- portfolio_calc("BWXT")
+# Portfolio calculation function
+portfolio_calc <- function(ticker, risk_free = r_f, port_long = portfolio, port_wide = portfolio_wide){
+  set.seed(123)
+  
+  # Setting up all the exp ann. returns for the portfolio
+  port_stock <- c(
+    nvda = mean(portfolio_wide$NVDA, na.rm = TRUE) * 52,
+    ba = mean(portfolio_wide$BA, na.rm = TRUE) * 52,
+    cvx = mean(portfolio_wide$CVX, na.rm = TRUE) * 52,
+    ko = mean(portfolio_wide$KO, na.rm = TRUE) * 52,
+    jpm = mean(portfolio_wide$JPM, na.rm = TRUE) * 52,
+    new_stock = model_ml(ticker)$exp_bayes_tbl$return # The annualized exp return
+  )
+  
+  
+  # Calculating the Covarince for the new portfolio
+  new_stock_hist <- technicals(ticker)$table %>% 
+    dplyr::select(date, return_log) %>% 
+    dplyr::rename(new_stock = return_log)
+  
+  port_hist <- port_wide %>% 
+    dplyr::select(date, NVDA, BA, CVX, KO, JPM) %>% 
+    dplyr::left_join(new_stock_hist, by = "date") %>% 
+    dplyr::select(-date)
+  
+  annual_cov <- stats::cov(port_hist, use = "complete.obs") * 52
+  
+  
+  # Running simulation to find the optimal portfolio values
+  sim <- replicate(5000, {
+    rnd_vals <- runif(6)
+    weight <- rnd_vals / sum(rnd_vals)
+    
+    port_rets <- sum(weight * port_stock)
+    port_sd <- sqrt(sum(weight * (annual_cov %*% weight)))
+    
+    c(
+      NVDA = weight[1],
+      BA = weight[2],
+      CVX = weight[3],
+      KO = weight[4],
+      JPM = weight[5],
+      new_stock = weight[6],
+      return = port_rets,
+      sd = as.numeric(port_sd)
+    )
+  })
+  
+  sim <- as.data.frame(t(sim))
+  
+  sim <- sim %>% 
+    dplyr::mutate(sharpe_ratio = (return - risk_free) / sd)
+  
+  opt_port <- sim %>% 
+    dplyr::slice_max(order_by = sharpe_ratio, n = 1)
+  
+  port_tbl <- tibble::tibble(
+    equity = ticker,
+    return = opt_port$return,
+    sd = opt_port$sd,
+    sharpe_ratio = opt_port$sharpe_ratio,
+    NVDA_w = opt_port$NVDA,
+    BA_w = opt_port$BA,
+    CVX_w = opt_port$CVX,
+    KO_w = opt_port$KO,
+    JPM_w = opt_port$JPM,
+    new_stock_w = opt_port$new_stock
+  )
+  
+  
+  return(port_tbl)
+}
+```
+
+```{r}
+plot_tsla <- portfolio_calc("TSLA") %>% dplyr::rename(TSLA_w = new_stock_w)
+plot_enb <- portfolio_calc("ENB") %>% dplyr::rename(ENB_w = new_stock_w)
+plot_amzn <- portfolio_calc("AMZN") %>% dplyr::rename(AMZN_w = new_stock_w)
+plot_lmt <- portfolio_calc("LMT") %>% dplyr::rename(LMT_w = new_stock_w)
+plot_bwxt <- portfolio_calc("BWXT") %>% dplyr::rename(BWXT_w = new_stock_w)
 
 plots_tbl <- dplyr::bind_rows(
   plot_tsla,
@@ -1298,6 +1408,20 @@ plots_tbl <- dplyr::bind_rows(
   plot_lmt,
   plot_bwxt
 )
+
+tbl_w <- plots_tbl %>%
+  dplyr::select(TSLA_w, ENB_w, AMZN_w, LMT_w, BWXT_w) %>% 
+  tidyr::pivot_longer(
+    c(TSLA_w, ENB_w, AMZN_w, LMT_w, BWXT_w),
+    names_to = "names",
+    values_to = "own_weight"
+  ) %>% 
+  tidyr::drop_na() %>% 
+  dplyr::select(-names)
+
+plots_tbl <- plots_tbl %>% 
+  dplyr::select(-c(TSLA_w, ENB_w, AMZN_w, LMT_w, BWXT_w)) %>% 
+  dplyr::bind_cols(tbl_w)
 ```
 
 ```{r}
@@ -1375,10 +1499,21 @@ plots_tbl %>%
     Equity = equity,
     Return = return,
     SD = sd,
-    `Sharpe Ratio` = sharpe_ratio
+    `Sharpe Ratio` = sharpe_ratio,
+    `NVDA Weight` = NVDA_w,
+    `BA Weight` = BA_w,
+    `CVX Weight` = CVX_w,
+    `KO Weight` = KO_w,
+    `JPM Weight` = JPM_w,
+    `Own Weight` = own_weight
   ) %>% 
   dplyr::arrange(desc(`Sharpe Ratio`)) %>% 
-  gt::gt()
+  gt::gt() %>% 
+  gt::fmt_number(columns = `Sharpe Ratio`, decimals = 4) %>% 
+  gt::fmt_percent(
+    columns = c(Return, SD, `NVDA Weight`, `BA Weight`, `CVX Weight`, `KO Weight`, `JPM Weight`, `Own Weight`),
+    decimals = 2
+  )
 ```
 
 We should choose the portfolio by seeing if its CAL is the steepest, so using the sharpe ratio which is the slope equation for that line.
