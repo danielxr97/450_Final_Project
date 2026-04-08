@@ -1144,6 +1144,30 @@ As a result, the Bayesian model was selected because it provides a prediction in
 
 # The Analysis
 
+```{r}
+# Portfolio Correlation Function
+portfolio_cor <- function(ticker, port_long = portfolio, port_wide = portfolio_wide){
+  new_stock_hist <- technicals(ticker)$table %>% 
+    dplyr::select(date, return_log) %>% 
+    dplyr::rename(!!sym(ticker) := return_log) # Converting the ticket string to a symbol and using walrus for assignment
+  
+  port_hist <- port_wide %>% 
+    dplyr::select(date, NVDA, BA, CVX, KO, JPM) %>% 
+    dplyr::left_join(new_stock_hist, by = "date") %>% 
+    dplyr::select(-date)
+  
+  port_cor <- stats::cor(port_hist, use = "complete.obs") %>% 
+    corrplot::corrplot(
+    method = "color",
+    type = "upper",
+    tl.col = "black",
+    tl.srt = 45,
+    order= "hclust",
+    addCoef.col = "black"
+    )
+}
+```
+
 ## Tesla
 
 Looking at Tesla, the Bayesian model predicts a weekly return of -4.21% with a wide prediction interval of \[-21.97%, 13.54%\], indicating substantial uncertainty in the forecast. The wide interval is expected, as Tesla is well known for its high volatility, suggesting it may addsignificant risk to the portfolio.
@@ -1158,6 +1182,14 @@ plot_tesla <- plot_it("TSLA")
 
 ```{r}
 plot_tesla$plot_return
+```
+
+The correlation matrix below shows the relationships between the portfolio assets and the assessment equities. Lower correlation between assets provides diversification benefits, reducing overall portfolio risk.
+
+Notably, Tesla has a relatively low correlation with several existing portfolio equities, particularly CVX(0.07) and KO (0.09), suggesting potential diversification benefits.
+
+```{r}
+portfolio_cor("TSLA")
 ```
 
 ```{r, warning=FALSE}
