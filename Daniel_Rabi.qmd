@@ -96,6 +96,8 @@ Where:
 
 $r_f =$ The 10-year U.S. Treasury Bond [@FRED_2026]
 
+Currently, the Sharpe Ratio of the portfolio is 0.6812, while the optimal portfolio's Sharpe Ratio is 1.0872.
+
 ```{r, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(tidyquant)
@@ -276,7 +278,7 @@ simulation %>% ggplot2::ggplot(ggplot2::aes(x = sd, y = return, color = return))
 
 # The List of Potential Equities
 
-The five equities that I have decided to assess are in the following table:
+The five assessment equities are in the following table:
 
 ```{r}
 dplyr::tibble(
@@ -365,9 +367,9 @@ Financial news sentiment measures the tone of financial news. Positive sentiment
 
 1.  **Loughran-McDonald:** According to @R_Project, the Loughran lexicon is created to interpret financial documents by labelling words into the following categories: negative, positive, litigious, uncertainty, constraining, and superfluous.
 2.  **AFINN:** According to @Ketchley_2023, AFINN captures valence, arousal, and dominance while providing a score to each word in accordance with those categories. The focus of this AFINN analysis is to capture the valence score for each word.
-3.  **NRC:** @Canada_2019 suggests that NRC is a collection of seven emotional word lexicons, with the aim of capturing the emotional tone of a text by categorizing words into categories such as positive, joy, trust, anticipation, fear, sadness, anger, disgust, negative, and surprise.
+3.  **NRC:** @Canada_2019 suggests that NRC is a collection of seven emotional word lexicons, designed to capture the emotional tone of a text by categorizing words into categories such as positive, joy, trust, anticipation, fear, sadness, anger, disgust, negative, and surprise.
 
-To arrive at a unified sentiment score, I decided to take the weighted average of the sentiment scores, assigning Loughran 85%, AFINN 10%, and NRC 5%. Additionally, I used @YahooFinance articles as my source of financial news.
+To arrive at a unified sentiment score, it computes the weighted average of the sentiment scores, assigning Loughran 85%, AFINN 10%, and NRC 5%. Additionally, the financial data for the sentiment analysis uses @YahooFinance articles around each equity, as well as macro-level economic news around the world.
 
 $$
 \text{Sentiment} = \text{Loughran} \cdot 0.85 + \text{AFINN} \cdot 0.1 + \text{NRC} \cdot 0.05
@@ -574,7 +576,7 @@ clean_market <- news_market %>%
   )
 ```
 
-```{r}
+```{r, include=FALSE}
 clean_market %>%
   dplyr::count(word, sort = TRUE) %>% 
   dplyr::top_n(20) %>% 
@@ -626,33 +628,52 @@ sentiment_analysis <- function(data){
   score <- 0.85 * loughran_score + 0.1 * afinn_score + 0.05 * nrc_score
 
   interpretation <- dplyr::case_when(
-    score >= 0.025981 ~ "Strong Positive", # Above the 3rd quartile
-    score >= 0.012856 ~ "Positive", # Between the Median and 3rd qurtile
-    score >= 0.004982 ~ "Mild Positive", # Between the 1st quartile and the Median
-    TRUE ~ "Weak Positive"
+    score >= 0.022700 ~ "Strong Positive", # Above the 3rd quartile
+    score >= 0.008919 ~ "Positive", # Between the Median and 3rd qurtile
+    score >= 0 ~ "Weak Positive", # Between zero and the Median
+    TRUE ~ "Negative"
   )
   
   return(list(score = score, inter = interpretation))
 }
 ```
 
-```{r, warning=FALSE, include=FALSE}
+To interpret the final sentiment score, thresholds are based on the cross-sectional distribution of the aggregate sentiment scores for the five candidate equities and the market sentiment score.
+
+```{r, warning=FALSE}
 # Using the distribution to decide on the interpretation ranges
-sentiment_analysis(clean_enb)
-
-
 scores <- c(
   sentiment_analysis(clean_tsla)$score,
   sentiment_analysis(clean_enb)$score,
   sentiment_analysis(clean_amzn)$score,
   sentiment_analysis(clean_lmt)$score,
-  sentiment_analysis(clean_bwxt)$score
+  sentiment_analysis(clean_bwxt)$score,
+  sentiment_analysis(clean_market)$score
 )
 
-summary(scores)
+summary_tbl <- tibble::tibble(
+  Statistic = names(summary(scores)),
+  Value = round(as.numeric(summary(scores)), 6)
+)
+
+summary_tbl %>%
+  gt::gt() %>% 
+  gt::tab_header(title = "Sentiment Score Distribution Summary") %>% 
+  gt::tab_style(
+    style = cell_fill(color = "indianred"),
+    locations = cells_title(groups = "title")
+  )
 ```
 
-```{r}
+-   **Score** $\geq$ **3rd quartile:** Strong positive sentiment
+
+-   **Median** $\leq$ **Score** $<$ **3rd quartile:** Positive sentiment
+
+-   $0 \leq$ **Score** $<$ **Median:** Weak positive sentiment
+
+-   **Score** $< 0$**:** Negative sentiment
+
+```{r, include=FALSE}
 news_amzn %>% 
   clean_text() %>% 
   tidytext::unnest_tokens(
@@ -1119,11 +1140,17 @@ plot_it <- function(ticker){
 
 Three models were tested, including Linear Regression, Random Forest, and Bayesian. However, the Linear Regression and Random Forest models presented a very low $R^2$, the explanatory power, which was expected as the efficient market theory should hold.
 
-As a result, the Bayesian model was selected because it provides a prediction interval rather than a single-point estimate, which is more appropriate for decision-making under uncertainty.
+As a result, the Bayesian model was selected because it provides a prediction interval rather than a single-point estimate, which is more appropriate for decision-making under uncertainty. To better visualize the Bayesian model's predicted values, the middle value of the interval is computed and displayed as a red line.
 
 # The Analysis
 
 ## Tesla
+
+Looking at Tesla, the Bayesian model predicts a weekly return of -4.21% with a wide prediction interval of \[-21.97%, 13.54%\], indicating substantial uncertainty in the forecast. The wide interval is expected, as Tesla is well known for its high volatility, suggesting it may addsignificant risk to the portfolio.
+
+The sentiment analysis score of 0.00188 indicates a weak positive sentiment around Tesla's financial news. The difference between the slight negative forecast and the weak positive sentiment suggests that the forecast is capturing market dynamics, such as momentum and investors' fear, that are not captured in the sentiment analysis.
+
+Given the combination of negative expected return and weak positive sentiment, Tesla is unlikely to improve the portfolio's risk-adjusted performance.
 
 ```{r}
 plot_tesla <- plot_it("TSLA")
@@ -1131,6 +1158,14 @@ plot_tesla <- plot_it("TSLA")
 
 ```{r}
 plot_tesla$plot_return
+```
+
+```{r, warning=FALSE}
+sentiment_tsla <- sentiment_analysis(clean_tsla)
+```
+
+```{r, eval=FALSE}
+sentiment_tsla
 ```
 
 ## Enbridge
@@ -1174,6 +1209,8 @@ plot_bwxt$plot_return
 ```
 
 # Conclusion
+
+Using the forecasted return for each equity
 
 ```{r}
 # Portfolio calculation function
@@ -1278,7 +1315,7 @@ simulation %>% ggplot2::ggplot(ggplot2::aes(x = sd, y = return, color = return))
   ) + 
   ggplot2::scale_color_manual(
     name = "Equity",
-    values = c(TSLA = "darkorchid", ENB = "indianred1", AMZN = "cadetblue1", LMT = "slateblue1", BWXT = "antiquewhite4")
+    values = c(TSLA = "darkorchid", ENB = "royalblue1", AMZN = "cadetblue1", LMT = "slateblue1", BWXT = "antiquewhite4")
   ) +
   ggrepel::geom_text_repel(
     data = plot_lmt,
@@ -1298,7 +1335,7 @@ simulation %>% ggplot2::ggplot(ggplot2::aes(x = sd, y = return, color = return))
   ggplot2::theme(plot.title = element_text(hjust = 0.5))
 ```
 
-As presented above, the best equity to add to the portfolio is Lockheed Martin (LMT). The portfolio with Lockheed Martin as an additional equity creates a sharpe ratio of 1.0267.
+As presented above, the best equity to add to the portfolio is Lockheed Martin (LMT). The portfolio with Lockheed Martin as an additional equity creates a Sharpe Ratio of 1.0267.
 
 ```{r}
 plots_tbl %>%
