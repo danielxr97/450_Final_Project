@@ -20,7 +20,7 @@ warning: FALSE
 
 Have you ever wondered how to decide whether you should add equity to your existing portfolio?
 
-In this project, I will walk you through the decision-making process for assessing equities before adding them to an existing portfolio.
+This report evaluates whether adding TSLA, ENB, AMZN, LMT, or BWXT to an existing portfolio improves risk-adjusted returns, using machine learning forecasts and news sentiment.
 
 # The Portfolio
 
@@ -117,6 +117,7 @@ library(recipes)
 library(parsnip)
 library(yardstick)
 library(rstanarm)
+library(ggnewscale)
 ```
 
 ```{r}
@@ -153,7 +154,6 @@ ann_cov <- stats::cov(returns, use = "pairwise.complete.obs") * 52
 
 
 # Static webscraping for the Risk Free Rate
-
 url <- "https://fred.stlouisfed.org/series/DGS10"
 
 rf_rate <- rvest::read_html(url) %>% 
@@ -164,7 +164,6 @@ rf_rate <- rvest::read_html(url) %>%
 rf_rate <- rf_rate / 100
 
 # Grabbing the Risk Free Rate Using FRED API
-
 r_f <- tidyquant::tq_get(
   "DGS10",
   get = "economic.data",
@@ -240,7 +239,11 @@ simulation %>% ggplot2::ggplot(ggplot2::aes(x = sd, y = return, color = return))
   ggrepel::geom_text_repel(
     data = best_sharpe_ratio,
     ggplot2::aes(x = sd, y = return, label = "Optimal Portfolio"),
-    color = "black"
+    color = "black",
+    segment.color = "black",
+    min.segment.length = 0,
+    nudge_x = -0.025,
+    nudge_y = 0.02
   ) +
   ggplot2::geom_line(
     data = optimal_table,
@@ -256,7 +259,11 @@ simulation %>% ggplot2::ggplot(ggplot2::aes(x = sd, y = return, color = return))
   ggrepel::geom_text_repel(
     data = portfolio_table,
     ggplot2::aes(x = portfolio_exp_sd, y = portfolio_exp_return, label = "Current Portfolio"),
-    color = "black"
+    color = "black",
+    segment.color = "black",
+    min.segment.length = 0,
+    nudge_x = 0.025,
+    nudge_y = 0.025
   ) +
   ggplot2::labs(
     title = "The Efficient Frontier",
@@ -321,7 +328,7 @@ To fairly assess each equity, I aim to estimate where each equity is heading one
 dplyr::tibble(
   Predictor = c(
     "Historical Log Returns",
-    "MACD",
+    "MACD Histogram",
     "MFI",
     "Rolling SD (12)",
     "S&P 500",
@@ -337,7 +344,7 @@ dplyr::tibble(
   ),
   Description = c(
     "Captures short-term momentum and trend of the time series",
-    "The Moving Average Convergence Divergence helps identify and measure trends in price and momentum, and to identify entry and exit points (Dolan, 2025).",
+    "The MACD histogram helps identify and measure trends in price and momentum, and to identify entry and exit points (Dolan, 2025). The histogram reflect differences between short-term and long-term moving averages and highlights increasing and decreasing trends by using darker colours (Dolan, 2025).",
     "Analyzes price movements and trading volumes to measure the flow of money into and out of an asset (Gratton, 2025).",
     "Using a moving standard deviation of the previous 12 weeks helps smooth out random spikes and capture short-term market transitions.",
     'Using "^GSPC" rather than "SPY" provides a direct comparison to the market, allowing capture of overall market movements and isolation of stock-specific returns.',
@@ -629,7 +636,8 @@ sentiment_analysis <- function(data){
 }
 ```
 
-```{r, warning=FALSE}
+```{r, warning=FALSE, include=FALSE}
+# Using the distribution to decide on the interpretation ranges
 sentiment_analysis(clean_enb)
 
 
@@ -806,90 +814,6 @@ technicals <- function(
     dplyr::left_join(market_gspc, by = "date")
   
   
-  
-  # Plotting the data
-  plot_return <- table %>% 
-    plotly::plot_ly(
-      x = ~date,
-      y = ~return_log,
-      type = "scatter",
-      mode = "lines"
-    ) %>% 
-    plotly::style(name = "Log Return") # For the trace legend when using subplot
-
-  plot_macd <- table %>%
-    plotly::plot_ly(x = ~date) %>% 
-    plotly::add_lines(x = ~date, y = ~macd, name = "MACD") %>% 
-    plotly::add_lines(x = ~date, y = ~signal, name = "Signal")
-  
-  plot_sd12 <- table %>%
-    plotly::plot_ly(
-      x = ~date,
-      y = ~sd12,
-      type = "scatter",
-      mode = "lines"
-      ) %>%  
-    plotly::style(name = "Rolling SD (12)")
-  
-  plot_mfi <- table %>% 
-    plotly::plot_ly(
-      x = ~date,
-      y = ~mfi,
-      type = "scatter",
-      mode = "lines"
-    ) %>%  
-    plotly::style(name = "MFI")
-  
-  plot_mkt <- table %>% 
-    plotly::plot_ly(x = ~date) %>%
-    plotly::add_lines(x = ~date, y = ~return_log, name = "Log Returns") %>% 
-    plotly::add_lines(x = ~date, y = ~gspc_return_log, name = "S&P 500")
-  
-  plot_vix <- table %>% 
-    plotly::plot_ly(
-      x = ~date,
-      y = ~vix_adjusted,
-      type = "scatter",
-      mode = "lines"
-    ) %>%  
-    plotly::style(name = "VIX")
-  
-  
-  plot_all_tech <- plotly::subplot(
-    plot_return,
-    plot_macd,
-    plot_sd12,
-    plot_mfi,
-    nrows = 4,
-    heights = c(0.30, 0.30, 0.20, 0.20), # Top plot get 25% of height, 2nd 25%, 3rd 25%, and bottom plot gets 25%
-    shareX = TRUE,
-    titleX = TRUE
-    ) %>% 
-    plotly::layout(
-      title = list(text = paste(ticker, "Time Series by Week")),
-      xaxis = list(title = "Date"),
-      yaxis = list(title = "Log Return", titlefont = list(size = 12)),
-      yaxis2 = list(title = "EMA", titlefont = list(size = 10)),
-      yaxis3 = list(title = "Standard Deviation", titlefont = list(size = 10)),
-      yaxis4 = list(title = "Momentum", titlefont = list(size = 10))
-      )
-  
-  
-  plot_all_mkt <- plotly::subplot(
-    plot_mkt,
-    plot_vix,
-    nrows = 2,
-    heights = c(0.55, 0.45),
-    shareX = TRUE,
-    titleX = TRUE
-    ) %>% 
-    plotly::layout(
-      title = list(text = paste(ticker, "Time Series by Week")),
-      xaxis = list(title = "Date"),
-      yaxis = list(title = "Log Return", titlefont = list(size = 12)),
-      yaxis2 = list(title = "Value", titlefont = list(size = 10))
-      )
-  
   table <- table %>% 
     dplyr::mutate(
       future_return = dplyr::lead(return_log, n = 1), # Needed for forecasting
@@ -917,7 +841,7 @@ model_ml <- function(ticker){
   training_data <- rsample::training(split_data)
   testing_data <- rsample::testing(split_data)
   
-  # Features
+  # Features Engineering
   recipe_pipeline <- 
     recipes::recipe(future_return ~ ., data = training_data) %>% 
     recipes::step_rm(date, plot_date) %>% 
@@ -1018,40 +942,44 @@ model_ml <- function(ticker){
     dplyr::select(-future_return) %>% 
     dplyr::slice_tail(n = 1) # Taking the most recent date data for forecast
   
-  pred_baked <- recipes::bake(recipe_pipeline, new_data = forecast_row)
+  forecast_baked <- recipes::bake(recipe_pipeline, new_data = forecast_row)
   
   # Forecasting the value
-  forecast_lm <- stats::predict(model_lm, new_data = forecast_row)
-  forecast_rf <- stats::predict(model_rf, new_data = forecast_row)
-  forecast_bayes <- stats::predict(model_bayes, new_data = forecast_row, type = "pred_int")
+  forecast_lm <- stats::predict(model_lm, new_data = forecast_baked)
+  forecast_rf <- stats::predict(model_rf, new_data = forecast_baked)
+  forecast_bayes <- stats::predict(model_bayes, new_data = forecast_baked, type = "pred_int")
   
   # Calculating values for portfolio analysis
-  bayes_exp_return <- ((forecast_bayes$.pred_lower + forecast_bayes$.pred_upper) / 2) * 52 # Taking the middle value (or avg.)
-  bayes_exp_sd <- ((forecast_bayes$.pred_upper - forecast_bayes$.pred_lower) / 4) * sqrt(52) # Using 4 b/c of 95% confidence, so 4 SD difference
+  bayes_exp_return <- ((forecast_bayes$.pred_lower + forecast_bayes$.pred_upper) / 2)# Taking the middle value (or avg.)
+  bayes_exp_sd <- ((forecast_bayes$.pred_upper - forecast_bayes$.pred_lower) / 4) # Using 4 b/c of 95% confidence, so 4 SD difference
   
   # Saving values to a table
   exp_bayes_tbl <- dplyr::tibble(
-    date = max(technicals(ticker)$table$date, na.rm = TRUE) + 7,
+    date = forecast_row$date + 7,
     pred_upper = forecast_bayes$.pred_upper,
     pred_lower = forecast_bayes$.pred_lower,
-    pred_mid = (pred_upper + pred_lower) / 2,
-    sd = bayes_exp_sd,
-    return = bayes_exp_return
+    pred_mid = (forecast_bayes$.pred_upper + forecast_bayes$.pred_lower) / 2,
+    sd = bayes_exp_sd * sqrt(52),
+    return = bayes_exp_return * 52
   )
   
   
   # Creating a table so I can plot the predicted with the actual
   plot_bayes_tbl <- testing_data %>% 
     dplyr::select(plot_date, future_return) %>% 
-    dplyr::left_join(predicted_bayes, by = "future_return") %>%
+    dplyr::bind_cols(predicted_bayes %>% dplyr::select(.pred_lower, .pred_upper)) %>%
     dplyr::rename(
       pred_upper = .pred_upper,
       pred_lower = .pred_lower
     ) %>% 
+    tibble::add_row(
+      plot_date = max(testing_data$plot_date, na.rm = TRUE) + 7,
+      pred_upper = forecast_bayes$.pred_upper,
+      pred_lower = forecast_bayes$.pred_lower
+    ) %>% 
     dplyr::mutate(
       pred_mid = (pred_upper + pred_lower ) / 2
     )
-  plot_bayes_tbl
   
   
   
@@ -1092,7 +1020,12 @@ plot_it <- function(ticker){
       data = data_ml,x = ~plot_date, y = ~pred_upper, name = "Predicted Upper Bound", line = list(width = 0)
       ) %>% 
     plotly::add_lines(data = data_ml, x = ~plot_date, y = ~pred_lower, name = "Predicted Lower Bound", fill = "tonexty", fillcolor = "rgba(0, 100, 200, 0.2)", line = list(width = 0)) %>% 
-    plotly::add_lines(data = data_ml, x = ~plot_date, y = ~pred_mid, name = "Predicted Middle")
+    plotly::add_lines(data = data_ml, x = ~plot_date, y = ~pred_mid, name = "Predicted Middle") %>% 
+    plotly::layout(
+      title = list(text = paste(ticker, "Time Series by Week")),
+      xaxis = list(title = "Date"),
+      yaxis = list(title = "Log Return", titlefont = list(size = 12))
+      )
 
   plot_macd <- table %>%
     plotly::plot_ly(x = ~date) %>% 
@@ -1174,313 +1107,198 @@ plot_it <- function(ticker){
       )
   
   
-  return(list(plot_stock = plot_all_tech, plot_market = plot_all_mkt))
+  return(list(
+    plot_return = plot_return,
+    plot_stock = plot_all_tech,
+    plot_market = plot_all_mkt
+    ))
 }
 ```
 
-```{r}
-x <- plot_it("TSLA")
-```
+## Forecasting - Machine Learning
 
-```{r}
-x$plot_stock
-```
+Three models were tested, including Linear Regression, Random Forest, and Bayesian. However, the Linear Regression and Random Forest models presented a very low $R^2$, the explanatory power, which was expected as the efficient market theory should hold.
 
-```{r}
-x$plot_market
-```
+As a result, the Bayesian model was selected because it provides a prediction interval rather than a single-point estimate, which is more appropriate for decision-making under uncertainty.
 
 # The Analysis
 
 ## Tesla
 
-First, let us examine the correlation matrix of our predictors to assess multicollinearity and the usefulness of each variable.
-
 ```{r}
-table_tsla <- technicals("TSLA")$table %>% 
-  tidyr::drop_na()
+plot_tesla <- plot_it("TSLA")
 ```
 
 ```{r}
-table_tsla %>% 
-  dplyr::select(c(future_return, return_log, macd_hist, mfi, sd12, vix_adjusted, gspc_return_log)) %>% 
-  stats::cor(use = "complete.obs") %>% 
-  corrplot::corrplot(
-    method = "color",
-    type = "upper",
-    tl.col = "black",
-    tl.srt = 45,
-    order= "hclust",
-    addCoef.col = "black"
-    )
+plot_tesla$plot_return
 ```
-
-We can see that:
-
--   There is a strong positive correlation between MCAD Hist and log return. This is a good sign
-
--   The S&P 500's log returns and Tesla's log returns have a strong positive correlation, which is a good sign.
-
--   There is a high negative correlation between MFI and VIX, which means that the higher the fear index is the lower the money flow.
-
-Overall, most correlations are essentially zero, as expected, because short-term returns are extremely hard to predict; if they were not, the market would not be efficient, and every individual would be able to make money trading.
-
-Now, let us take a look at the at the future returns against each individual predictor.
-
-```{r}
-univariate_tsla <- table_tsla %>% 
-  dplyr::select(-1:-6, -8, -9, -vix_return_log, -gspc_adjusted, -future_return) %>% 
-  purrr::map(~lm(table_tsla$future_return ~ .x, data = table_tsla)) %>% 
-  purrr::map(summary) %>% 
-  purrr::map_dbl("r.squared") %>% 
-  tibble::tibble(Predictors = names(.), r.squared = .) %>% 
-  dplyr::arrange(desc(.[[2]]))
-
-univariate_tsla %>% 
-  gt::gt() %>% 
-  gt::fmt_percent(columns = !matches("Predictors"), decimals = 1)
-```
-
-We can see that individual predictors exhibit very low explanatory power, with the highest being MACD's histogram at 1.4%. Again, this is expected because of the efficient market theory.
-
-Now, I will test different models to see which one is best. It is important to mention that I stated by adding the log returns of the S&P 500 even though it has the lowest $R^2$ because it is the market and market returns are the primary driver of every public equity returns.
-
-```{r}
-fit1 <- lm(future_return ~ gspc_return_log, table_tsla)
-fit2 <- lm(future_return ~ gspc_return_log + macd_hist, table_tsla)
-fit3 <- lm(future_return ~ gspc_return_log + macd_hist + return_log, table_tsla)
-fit4 <- lm(future_return ~ gspc_return_log + macd_hist + return_log + vix_adjusted, table_tsla)
-fit5 <- lm(future_return ~ gspc_return_log + macd_hist + return_log + vix_adjusted + mfi, table_tsla)
-fit6 <- lm(future_return ~ gspc_return_log + macd_hist + return_log + vix_adjusted + mfi + sd12, table_tsla)
-
-fit1 %>% 
-  broom::glance() %>% 
-  dplyr::add_row(fit2 %>% broom::glance()) %>% 
-  dplyr::add_row(fit3 %>% broom::glance()) %>% 
-  dplyr::add_row(fit4 %>% broom::glance()) %>% 
-  dplyr::add_row(fit5 %>% broom::glance()) %>% 
-  dplyr::add_row(fit6 %>% broom::glance()) %>% 
-  select(r.squared, adj.r.squared, statistic, p.value) %>% 
-  dplyr::mutate(model = paste0("Model ", dplyr::row_number())) %>% 
-  dplyr::select(model, everything()) %>% 
-  gt::gt() %>% 
-  gt::fmt_percent(columns = !matches("statistic|model"), decimals = 1) %>% 
-  gt::fmt_number(columns = matches("statistic"), decimals = 1) %>% 
-  gt::fmt_percent(columns = matches("p.value"), decimals = 3)
-```
-
-By looking at the $R^2_{adjusted}$ at the table above, we can see that adding more predictors after the second model results in a less meaningful model, since $R^2_{adjusted}$ decreases.
-
-```{r}
-options(mc.cores = parallel::detectCores())
-set.seed(123)
-
-# Sampling
-split_data <- table_tsla %>%
-  dplyr::select(date, plot_date, future_return, return_log, sd12, macd_hist, mfi, vix_adjusted, gspc_return_log) %>% 
-  rsample::initial_time_split(prop = 0.7)
-
-training_data <- rsample::training(split_data)
-testing_data <- rsample::testing(split_data)
-
-# Features
-recipe_pipeline <- 
-  recipes::recipe(future_return ~ ., data = training_data) %>% 
-  recipes::step_rm(date, plot_date) %>% 
-  recipes::step_normalize(all_numeric_predictors()) %>% 
-  recipes::prep()
-
-training_baked <- recipes::bake(recipe_pipeline, training_data)
-testing_baked <- recipes::bake(recipe_pipeline, testing_data)
-
-# Modeling - Linear Regression
-model_lm <-
-  parsnip::linear_reg(mode = "regression") %>% 
-  parsnip::set_engine("lm") %>% 
-  parsnip::fit(future_return ~ ., data = training_baked)
-
-# Predicting
-predicted_lm <- model_lm %>% 
-  stats::predict(new_data = testing_baked) %>% 
-  dplyr::bind_cols(future_return = testing_baked %>% dplyr::select(future_return))
-
-# Metrics
-parsnip::tidy(model_lm) %>% 
-  gt::gt() %>% 
-  gt::fmt_percent(columns = matches("std.error"), decimals = 2)
-parsnip::glance(model_lm) %>% 
-  gt::gt() %>% 
-  gt::fmt_percent(columns = matches("r.squared|adj.r.squared"), decimals = 2)
-
-predicted_lm %>% 
-  yardstick::metrics(truth = future_return, estimate = .pred) %>% 
-  dplyr::arrange(.metric) %>% 
-  gt::gt() %>% 
-  gt::fmt_percent(columns = matches(".estimate"), decimals = 2)
-```
-
-An $R^2$ of $1.4\%$ means that this model explains only $1.4\%$ of the variation in future returns on the test set. $1.4\% \ R^2$ is very low, but is expected for a short-term prediction.
-
-According to @Kavlakoglu, Random Forest regression can help reduce overfitting by combining randomness with decision tree simulations and helping to decide on the best feature importance. For that reason, I will attempt to run a Random Forest model to increase the model's $R^2$.
-
-```{r}
-set.seed(123)
-
-# Modeling - Random Forest
-model_rf <-
-  parsnip::rand_forest(
-    mode = "regression",
-    trees = 750, # 750 different decision trees
-    mtry = 3, # number of variables to randomly select and choosing the best split out of them
-    min_n = 5 # Min number of observations in a leaf or end of a tree branch
-    ) %>% 
-  parsnip::set_engine(
-    "ranger",
-    importance = "impurity" # Using reduction in variance for each split
-    ) %>% 
-  parsnip::fit(future_return ~ ., data = training_baked)
-
-# Predicting
-predicted_rf <- model_rf %>% 
-  stats::predict(new_data = testing_baked) %>% 
-  dplyr::bind_cols(future_return = testing_baked %>% dplyr::select(future_return))
-
-# Metrics
-predicted_rf %>% 
-  yardstick::metrics(truth = future_return, estimate = .pred) %>% 
-  dplyr::arrange(.metric) %>% 
-  gt::gt() %>% 
-  gt::fmt_percent(columns = matches(".estimate"), decimals = 2)
-```
-
-As you can see, the Random Forest model produced an $R^2$ of $0.57\%$, which is lower than the linear model's model.
-
-Since, it is extremely difficult to forecast the exact value of returns I will use the Bayesian model to provide me a range.
-
-```{r}
-set.seed(123)
-
-# Modeling - Bayesian Regression
-model_bayes <-
-  parsnip::linear_reg(mode = "regression") %>% 
-  parsnip::set_engine(
-    "stan",
-    prior_intercept = rstanarm::normal(0, 1), # I believe -> mean: 0; SD: 1
-    prior = rstanarm::normal(0, 0.5), # I believe -> mean: 0; SD: 0.5
-    iter = 4000, # Number of simulations
-    seed = 123
-  ) %>% 
-  parsnip::fit(future_return ~ ., data = training_baked)
-
-# Predicting
-predicted_bayes <- model_bayes %>% 
-  stats::predict(new_data = testing_baked, type = "pred_int") %>% 
-  dplyr::bind_cols(future_return = testing_baked %>% dplyr::select(future_return))
-
-# Metrics
-predicted_bayes %>% 
-  dplyr::rename(
-    "Lower Bound" = .pred_lower,
-    "Upper Bound" = .pred_upper,
-    "Actual Return" = future_return
-  ) %>% 
-  dplyr::slice_head(n = 5) %>% 
-  gt::gt()
-```
-
-Looking at the first five results, we can already see that the interval is wide, suggesting significant uncertainty, which is what I expected, as this is a short-term financial forecast. The good news is that the actual value falls within the predicted interval.
 
 ## Enbridge
 
 ```{r}
-table_enb <- technicals("ENB")$table
+plot_enb <- plot_it("ENB")
 ```
 
 ```{r}
-table_tsla %>% 
-  tidyr::drop_na() %>% 
-  dplyr::select(c(return_log, macd_hist, mfi, sd12, vix_adjusted, gspc_return_log)) %>% 
-  stats::cor(use = "complete.obs") %>% 
-  corrplot::corrplot(
-    method = "color",
-    type = "upper",
-    tl.col = "black",
-    tl.srt = 45,
-    order= "hclust",
-    addCoef.col = "black"
-    )
+plot_enb$plot_return
 ```
 
 ## Amazon
 
 ```{r}
-table_amzn <- technicals("AMZN")$table
+plot_amzn <- plot_it("AMZN")
 ```
 
 ```{r}
-table_tsla %>% 
-  tidyr::drop_na() %>% 
-  dplyr::select(c(return_log, macd_hist, mfi, sd12, vix_adjusted, gspc_return_log)) %>% 
-  stats::cor(use = "complete.obs") %>% 
-  corrplot::corrplot(
-    method = "color",
-    type = "upper",
-    tl.col = "black",
-    tl.srt = 45,
-    order= "hclust",
-    addCoef.col = "black"
-    )
+plot_amzn$plot_return
 ```
 
 ## Lockheed Martin
 
 ```{r}
-table_lmt <- technicals("LMT")$table
+plot_lmt <- plot_it("LMT")
 ```
 
 ```{r}
-table_tsla %>% 
-  tidyr::drop_na() %>% 
-  dplyr::select(c(return_log, macd_hist, mfi, sd12, vix_adjusted, gspc_return_log)) %>% 
-  stats::cor(use = "complete.obs") %>% 
-  corrplot::corrplot(
-    method = "color",
-    type = "upper",
-    tl.col = "black",
-    tl.srt = 45,
-    order= "hclust",
-    addCoef.col = "black"
-    )
+plot_lmt$plot_return
 ```
-
-High positive correlation:
-
--   MCAD Hist and log return
-
--   SD12 and VIX
 
 ## BWX Technologies
 
 ```{r}
-table_bwxt <- technicals("BWXT")$table
+plot_bwxt <- plot_it("BWXT")
 ```
 
 ```{r}
-table_bwxt %>% 
-  tidyr::drop_na() %>% 
-  dplyr::select(c(return_log, macd_hist, mfi, sd12, vix_adjusted, gspc_return_log)) %>% 
-  stats::cor(use = "complete.obs") %>% 
-  corrplot::corrplot(
-    method = "color",
-    type = "upper",
-    tl.col = "black",
-    tl.srt = 45,
-    order= "hclust",
-    addCoef.col = "black"
-    )
+plot_bwxt$plot_return
 ```
 
 # Conclusion
+
+```{r}
+# Portfolio calculation function
+portfolio_calc <- function(ticker, risk_free = r_f, port_long = portfolio, port_wide = portfolio_wide){
+  port_stock <- c(
+    nvda = mean(portfolio_wide$NVDA, na.rm = TRUE) * 52,
+    ba = mean(portfolio_wide$BA, na.rm = TRUE) * 52,
+    cvx = mean(portfolio_wide$CVX, na.rm = TRUE) * 52,
+    ko = mean(portfolio_wide$KO, na.rm = TRUE) * 52,
+    jpm = mean(portfolio_wide$JPM, na.rm = TRUE) * 52,
+    new_stock = model_ml(ticker)$exp_bayes_tbl$return
+  )
+  
+  new_stock_hist <- technicals(ticker)$table %>% 
+    dplyr::select(date, return_log) %>% 
+    dplyr::rename(new_stock = return_log)
+  
+  port_hist <- port_wide %>% 
+    dplyr::select(date, NVDA, BA, CVX, KO, JPM) %>% 
+    dplyr::left_join(new_stock_hist, by = "date") %>% 
+    dplyr::select(-date)
+  
+  port_cov <- stats::cov(port_hist, use = "complete.obs") * 52
+  
+  weights <- rep(1/6, 6)
+  
+  port_return <- sum(weights * port_stock)
+  port_sd <- sqrt(as.numeric(t(weights) %*% port_cov %*% weights))
+  sharpe <- (port_return - risk_free) / port_sd
+  
+  port_tbl <- tibble::tibble(
+    equity = ticker,
+    return = port_return,
+    sd = port_sd,
+    sharpe_ratio = sharpe
+  )
+  
+  return(port_tbl)
+}
+```
+
+```{r}
+plot_tsla <- portfolio_calc("TSLA")
+plot_enb <- portfolio_calc("ENB")
+plot_amzn <- portfolio_calc("AMZN")
+plot_lmt <- portfolio_calc("LMT")
+plot_bwxt <- portfolio_calc("BWXT")
+```
+
+```{r}
+plots_tbl <- dplyr::bind_rows(
+  plot_tsla,
+  plot_enb,
+  plot_amzn,
+  plot_lmt,
+  plot_bwxt
+)
+```
+
+```{r}
+simulation %>% ggplot2::ggplot(ggplot2::aes(x = sd, y = return, color = return)) +
+  ggplot2::geom_point(alpha = 0.3) + 
+  ggplot2::scale_color_viridis_c(name = "Log Return") +
+  ggnewscale::new_scale_color() +
+  ggplot2::geom_point(
+    data = best_sharpe_ratio,
+    ggplot2::aes(x = sd, y = return),
+    color = "orange",
+    size = 2
+  ) +
+  ggrepel::geom_text_repel(
+    data = best_sharpe_ratio,
+    ggplot2::aes(x = sd, y = return, label = "Optimal Portfolio"),
+    color = "black",
+    segment.color = "black",
+    min.segment.length = 0,
+    nudge_x = -0.025,
+    nudge_y = 0.02
+  ) +
+  ggplot2::geom_line(
+    data = optimal_table,
+    ggplot2::aes(x = sd, y = return),
+    color = "orange"
+  ) +
+  ggplot2::geom_point(
+    data = portfolio_table,
+    ggplot2::aes(x = portfolio_exp_sd, y = portfolio_exp_return),
+    color = "palevioletred1",
+    size = 2
+  ) + 
+  ggrepel::geom_text_repel(
+    data = portfolio_table,
+    ggplot2::aes(x = portfolio_exp_sd, y = portfolio_exp_return, label = "Current Portfolio"),
+    color = "black",
+    segment.color = "black",
+    min.segment.length = 0,
+    nudge_x = 0.045,
+    nudge_y = 0.025
+  ) +
+  ggplot2::geom_point(
+    data = plots_tbl,
+    ggplot2::aes(x = sd, y = return, color = equity),
+    size = 2
+  ) + 
+  ggplot2::scale_color_manual(
+    name = "Equity",
+    values = c(TSLA = "darkorchid", ENB = "indianred1", AMZN = "cadetblue1", LMT = "slateblue1", BWXT = "antiquewhite4")
+  ) +
+  ggrepel::geom_text_repel(
+    data = plot_lmt,
+    ggplot2::aes(x = sd, y = return, label = "LMT Portfolio"),
+    color = "black",
+    segment.color = "black",
+    min.segment.length = 0,
+    nudge_x = -0.025,
+    nudge_y = 0.025
+  ) +
+  ggplot2::labs(
+    title = "The Efficient Frontier",
+    x = "Annualized Standard Deviation (Risk)",
+    y = "Annualized Expected Log Return",
+    color = "Log Return"
+  ) +
+  ggplot2::theme(plot.title = element_text(hjust = 0.5))
+```
 
 1.  Predictive modeling
     -   Future returns
