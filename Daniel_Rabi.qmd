@@ -2,6 +2,8 @@
 title: "Equity Portfolio Decision Making"
 author: Daniel Rabi
 date: April 9, 2026
+toc: true
+toc_float: true
 backgroundcolor: lightblue
 format: html
 editor: visual
