@@ -10,7 +10,7 @@ editor: visual
 embed-resources: true
 bibliography: references/references.bib
 csl: references/apa.csl
-output-file: index
+#output-file: index
 nocite: "@YahooFinance, @Gratton_2025, @Dolan_2025, @Kuepper_2025"
 
 echo: FALSE
