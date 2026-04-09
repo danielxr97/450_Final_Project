@@ -26,7 +26,7 @@ This report evaluates whether adding TSLA, ENB, AMZN, LMT, or BWXT to an existin
 
 # The Portfolio
 
-For this project's portfolio, I used a fixed, fairly diversified existing portfolio that contains the following companies:
+This project's portfolio fairly diversified, unoptimized, existing portfolio that contains the following companies:
 
 ```{r, message=FALSE, warning=FALSE}
 library(gt)
@@ -283,7 +283,7 @@ simulation %>% ggplot2::ggplot(ggplot2::aes(x = sd, y = return, color = return))
 
 # The List of Potential Equities
 
-The five assessment equities are in the following table:
+The following table presents the list of five assessment equities:
 
 ```{r}
 dplyr::tibble(
@@ -327,9 +327,15 @@ dplyr::tibble(
 
 # Analysis Components
 
-## Technical Predictors
+## Machine Learning Forecasting
 
-To fairly assess each equity, I aim to estimate where each equity is heading one week ahead. Therefore, I use the following predictors to estimate next week's log returns for each equity.
+Three models were tested, including Linear Regression, Random Forest, and Bayesian. However, the Linear Regression and Random Forest models presented a very low $R^2$, the explanatory power, which was expected as the efficient market theory should hold.
+
+As a result, the Bayesian model was selected because it provides a prediction interval rather than a single-point estimate, which is more appropriate for decision-making under uncertainty. To better visualize the Bayesian model's predicted values, the middle value of the interval is computed and displayed as a red line.
+
+### Technical Predictors
+
+To fairly assess each equity, the following predictors are used to estimate next week's log returns.
 
 ```{r}
 dplyr::tibble(
@@ -1140,12 +1146,6 @@ plot_it <- function(ticker){
     ))
 }
 ```
-
-## Forecasting - Machine Learning
-
-Three models were tested, including Linear Regression, Random Forest, and Bayesian. However, the Linear Regression and Random Forest models presented a very low $R^2$, the explanatory power, which was expected as the efficient market theory should hold.
-
-As a result, the Bayesian model was selected because it provides a prediction interval rather than a single-point estimate, which is more appropriate for decision-making under uncertainty. To better visualize the Bayesian model's predicted values, the middle value of the interval is computed and displayed as a red line.
 
 # The Analysis
 
