@@ -10,7 +10,7 @@ editor: visual
 embed-resources: true
 bibliography: references/references.bib
 csl: references/apa.csl
-#output-file: index
+output-file: index
 nocite: "@YahooFinance, @Gratton_2025, @Dolan_2025, @Kuepper_2025"
 
 echo: FALSE
@@ -1175,7 +1175,7 @@ portfolio_cor <- function(ticker, port_long = portfolio, port_wide = portfolio_w
 
 ## Tesla
 
-Looking at Tesla, the Bayesian model predicts a weekly return of -4.21% with a wide prediction interval of \[-21.97%, 13.54%\], indicating substantial uncertainty in the forecast. The wide interval is expected, as Tesla is well known for its high volatility, suggesting it may add significant risk to the portfolio.
+Looking at Tesla, the Bayesian model predicts a weekly return of -3.97% with a wide prediction interval of \[-21.97%, 13.78%\], indicating substantial uncertainty in the forecast. The wide interval is expected, as Tesla is well known for its high volatility, suggesting it may add significant risk to the portfolio.
 
 The sentiment analysis score of 0.00188 indicates a weak positive sentiment around Tesla's financial news. The difference between the negative forecast and the weak positive sentiment suggests that the forecast is capturing market dynamics, such as momentum and investors' fear, that are not captured in the sentiment analysis.
 
@@ -1191,7 +1191,7 @@ plot_tesla$plot_return
 
 The correlation matrix below shows the relationships between the portfolio assets and the assessment equities. Lower correlation between assets provides diversification benefits, reducing overall portfolio risk.
 
-Notably, Tesla has a relatively low correlation with several existing portfolio equities, particularly CVX(0.07) and KO (0.09), suggesting potential diversification benefits.
+Notably, Tesla has a relatively low correlation with several existing portfolio equities, particularly CVX(0.08) and KO (0.09), suggesting potential diversification benefits.
 
 ```{r}
 portfolio_cor("TSLA")
@@ -1207,11 +1207,9 @@ sentiment_tsla
 
 ## Enbridge
 
-Looking at Enbridge, the Bayesian model predicts a large weekly return of 4.82% with a prediction interval of \[-5.06%, 6.02%\], indicating a moderate uncertainty in the forecast. Compared to other equities, Enbridge has the narrowest interval, suggesting stable, predictable returns.
+Looking at Enbridge, the Bayesian model predicts a large weekly return of 0.68% with a prediction interval of \[-4.80%, 6.17%\], indicating a moderate uncertainty in the forecast. Compared to other equities, Enbridge has the narrowest interval, suggesting stable, predictable returns.
 
 The sentiment analysis score of 0.03398 indicates a strong positive sentiment around Enbridge's financial news. The strong positive forecast and the strong positive sentiment suggest that there is a huge upside potential for Enbridge.
-
-Given the combination of negative expected return and weak positive sentiment, Tesla is unlikely to improve the portfolio's risk-adjusted performance.
 
 ```{r}
 plot_enb <- plot_it("ENB")
@@ -1239,7 +1237,7 @@ sentiment_enb
 
 ## Amazon
 
-Looking at Amazon, the Bayesian model predicts a weekly return of -0.05% with a prediction interval of \[-9.52%, 9.42%\], indicating a high uncertainty in the forecast.
+Looking at Amazon, the Bayesian model predicts a weekly return of -0.31% with a prediction interval of \[-9.68%, 9.06%\], indicating a high uncertainty in the forecast.
 
 The sentiment analysis score of 0.01286 indicates a positive sentiment around Amazon's financial news. The difference between the slight negative forecast and the positive sentiment suggests that the forecast is capturing market dynamics, such as momentum and investors' fear, that are not captured in the sentiment analysis.
 
@@ -1251,7 +1249,7 @@ plot_amzn <- plot_it("AMZN")
 plot_amzn$plot_return
 ```
 
-Looking at the correlation matrix below, Amazon has relatively low correlations with KO (0.07) and CVX (0.08), indicating strong diversification benefits. However, AMZN shows a high correlation with NVDA (0.57), reflecting their shared exposure to the technology industry.
+Looking at the correlation matrix below, Amazon has relatively low correlations with KO (0.05) and CVX (0.07), indicating strong diversification benefits. However, AMZN shows a high correlation with NVDA (0.57), reflecting their shared exposure to the technology industry.
 
 ```{r}
 portfolio_cor("AMZN")
@@ -1267,7 +1265,7 @@ sentiment_amzn
 
 ## Lockheed Martin
 
-For Lockheed Martin, the Bayesian model predicts a weekly return of 1.18% with a 95% prediction interval of \[-5.29%, 7.66%\], indicating moderate uncertainty in the forecast. While the expected return is positive, LMT still shows some short-term performance variability.
+For Lockheed Martin, the Bayesian model predicts a weekly return of 0.87% with a prediction interval of \[-5.56%, 7.31%\], indicating moderate uncertainty in the forecast. While the expected return is positive, LMT still shows some short-term performance variability.
 
 The sentiment analysis score of 0.00498 indicates a weak positive sentiment around Lockheed Martin's financial news, aligning with the model's positive forecast and suggesting a mildly favourable outlook.
 
@@ -1297,7 +1295,7 @@ sentiment_lmt
 
 ## BWX Technologies
 
-For BWX Technologies, the Bayesian model predicts a weekly return of 0.52% with a prediction interval of \[-6.80%, 7.84%\], indicating a moderate uncertainty in the forecast.
+For BWX Technologies, the Bayesian model predicts a weekly return of 0.43% with a prediction interval of \[-6.81%, 7.68%\], indicating a moderate uncertainty in the forecast.
 
 Although BWX's forecasted return is low and its volatility is moderate, its sentiment analysis score of 0.02598 indicates strong positive sentiment around BWX's financial news. The difference between the slight positive forecast and the strong positive sentiment suggests that the forecast is capturing market dynamics, such as momentum and investors' fear, that are not captured in the sentiment analysis.
 
@@ -1327,7 +1325,7 @@ sentiment_bwxt
 
 # Conclusion
 
-Using the forecasted return for each assessment equity as their expected return and computing the optimal weights for the portfolio when each one of the equities is added to the portfolio, it is immediately noticeable that Lockheed Martin provides the most optimal risk-adjusted return portfolio.
+Using the forecasted return for each assessment equity as their expected return and computing the optimal weights for the portfolio when each one of the equities is added to the portfolio, it is noticeable that Lockheed Martin provides the most optimal risk-adjusted return portfolio with only a slight more risk than ENB's portfolio but with much more return.
 
 ```{r}
 optimal_port <- function(ticker, risk_free = r_f, port_long = portfolio, port_wide = portfolio_wide){
@@ -1575,21 +1573,21 @@ simulation %>% ggplot2::ggplot(ggplot2::aes(x = sd, y = return, color = return))
   ggplot2::theme(plot.title = element_text(hjust = 0.5))
 ```
 
-As depicted in the table below, Lockheed Martin's Sharpe Ratio is a staggering 2.1761.
+As depicted in the table below, Lockheed Martin's Sharpe Ratio is 1.7517.
 
-That said, it is also important to consider financial news sentiment when making a decision. As mentioned before, LMT has a weak positive financial news sentiment, but since its Sharpe Ratio is significantly larger than the second largest Sharpe Ratio with also the lowest standard deviation, I would suggest adding LMT to the current portfolio with the following weightings:
+That said, it is also important to consider financial news sentiment when making a decision. As mentioned before, LMT has a weak positive financial news sentiment, but since its Sharpe Ratio is much larger than the second largest Sharpe Ratio, with also the lowest standard deviation, I would suggest adding LMT to the current portfolio with the following weightings:
 
--   **LMT:** 49.74%
+-   **LMT:** 44.45%
 
--   **NVDA:** 6.04%
+-   **NVDA:** 17.84%
 
--   **BA:** 3.32%
+-   **BA:** 0.18%
 
--   **CVX:** 7.79%
+-   **CVX:** 2.34%
 
--   **KO:** 31.63%
+-   **KO:** 19.46%
 
--   **JPM:** 1.49%
+-   **JPM:** 15.74%
 
 ```{r}
 plots_tbl %>%
