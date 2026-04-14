@@ -1109,7 +1109,7 @@ plot_it <- function(ticker){
     plot_sd12,
     plot_mfi,
     nrows = 4,
-    heights = c(0.30, 0.30, 0.20, 0.20), # Top plot get 25% of height, 2nd 25%, 3rd 25%, and bottom plot gets 25%
+    heights = c(0.30, 0.30, 0.20, 0.20), # Top plot get 30% of height, 2nd 30%, 3rd 20%, and bottom plot gets 20%
     shareX = TRUE,
     titleX = TRUE
     ) %>% 
@@ -1575,7 +1575,7 @@ simulation %>% ggplot2::ggplot(ggplot2::aes(x = sd, y = return, color = return))
 
 As depicted in the table below, Lockheed Martin's Sharpe Ratio is 1.7517.
 
-That said, it is also important to consider financial news sentiment when making a decision. As mentioned before, LMT has a weak positive financial news sentiment, but since its Sharpe Ratio is much larger than the second largest Sharpe Ratio, with also the lowest standard deviation, I would suggest adding LMT to the current portfolio with the following weightings:
+That said, it is also important to consider financial news sentiment when making a decision. As mentioned before, LMT has a weak positive financial news sentiment, but since its Sharpe Ratio is much larger than the second largest Sharpe Ratio, I would suggest adding LMT to the current portfolio with the following weightings:
 
 -   **LMT:** 44.45%
 
