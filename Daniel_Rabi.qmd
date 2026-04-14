@@ -13,12 +13,16 @@ csl: references/apa.csl
 output-file: index
 nocite: "@YahooFinance, @Gratton_2025, @Dolan_2025, @Kuepper_2025"
 
+include-in-header: 
+      - text: |
+          <link rel="icon" href="images/favicon32.png"/>
+
 echo: FALSE
 message: FALSE
 warning: FALSE
 ---
 
-![[@Zerdzicki_2026]](images/into_picture.jpg){fig-align="center" width="600"}
+![[@Zerdzicki_2026]](images/intro_picture.png){fig-align="center" width="600"}
 
 Have you ever wondered how to decide whether you should add equity to your existing portfolio?
 
