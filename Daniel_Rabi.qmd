@@ -16,6 +16,7 @@ nocite: "@YahooFinance, @Gratton_2025, @Dolan_2025, @Kuepper_2025"
 include-in-header: 
       - text: |
           <link rel="icon" href="images/favicon32.png"/>
+          <link rel="apple-touch-icon" href="images/favicon_apple.png"/>
 
 echo: FALSE
 message: FALSE
