@@ -135,6 +135,10 @@ library(ggnewscale)
 ```
 
 ```{r}
+options(mc.cores = parallel::detectCores())
+```
+
+```{r}
 portfolio_stocks <- c("NVDA", "BA", "CVX", "KO", "JPM")
 
 
@@ -395,8 +399,6 @@ $$
 $$
 
 ```{r}
-options(mc.cores = parallel::detectCores()) # Utilizing all the cores
-
 # Dynamic Webscraping
 Sys.setenv(PATH = paste(Sys.getenv("PATH"), "C:/Program Files/nodejs", sep=";"))
 
@@ -867,7 +869,6 @@ technicals <- function(
 ```{r}
 # Machine Learning function for predicting the log returns
 model_ml <- function(ticker){
-  options(mc.cores = parallel::detectCores())
   set.seed(123)
   
   table <- technicals(ticker)$table %>% 
