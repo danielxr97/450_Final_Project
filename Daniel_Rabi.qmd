@@ -15,11 +15,19 @@ nocite: "@YahooFinance, @Gratton_2025, @Dolan_2025, @Kuepper_2025"
 
 include-in-header: 
       - text: |
-          <link rel="icon" href="images/favicon32.png"/>
-          <link rel="icon" href="images/favicon16.png"/>
+          <!-- Website's Favicon -->
+          <link rel = "icon" href = "images/favicon32.png"/>
+          <link rel = "icon" href = "images/favicon16.png"/>
           
-          <!-- Apple -->
-          <link rel="apple-touch-icon" href="images/favicon_apple.png"/>
+          <!-- Apple's Favicon -->
+          <link rel = "apple-touch-icon" href = "images/favicon_apple.png"/>
+          
+          <!-- Open Graph Tags -->
+          <meta property = "og:title" content= "Equity Portfolio Decision Making">
+          <meta property = "og:description" content= "A portfolio selection project using machine learning, financial news sentiment, and efficient frontier analysis.">
+          <meta property = "og:image" content = "https://https://danielxr97.github.io/Portfolio_Analysis/images/intro_picture.png">
+          <meta property="og:url" content="https://https://danielxr97.github.io/Portfolio_Analysis/">
+          <meta property = "og:type" content = "website">
 
 echo: FALSE
 message: FALSE
@@ -1184,7 +1192,7 @@ portfolio_cor <- function(ticker, port_long = portfolio, port_wide = portfolio_w
 
 ## Tesla
 
-Looking at Tesla, the Bayesian model predicts a weekly return of -3.97% with a wide prediction interval of \[-21.97%, 13.78%\], indicating substantial uncertainty in the forecast. The wide interval is expected, as Tesla is well known for its high volatility, suggesting it may add significant risk to the portfolio.
+Looking at Tesla, the Bayesian model predicts a weekly return of 1.14% with a wide prediction interval of \[-18.55%, 16.27%\], indicating substantial uncertainty in the forecast. The wide interval is expected, as Tesla is well known for its high volatility, suggesting it may add significant risk to the portfolio.
 
 The sentiment analysis score of 0.00188 indicates a weak positive sentiment around Tesla's financial news. The difference between the negative forecast and the weak positive sentiment suggests that the forecast is capturing market dynamics, such as momentum and investors' fear, that are not captured in the sentiment analysis.
 
