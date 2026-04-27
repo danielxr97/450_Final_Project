@@ -106,9 +106,7 @@ The efficient frontier is the set of portfolios plotted against their levels of 
 
 The Sharpe Ratio equation:
 
-$$
-\text{Sharpe Ratio} = \frac{E(R_P) - r_f}{\sigma(R_P)}
-$$
+$$\text{Sharpe Ratio} = \frac{E(R_P) - r_f}{\sigma(R_P)}$$
 
 Where:
 
@@ -402,9 +400,7 @@ Financial news sentiment measures the tone of financial news. Positive sentiment
 
 To arrive at a unified sentiment score, it computes the weighted average of the sentiment scores, assigning Loughran 85%, AFINN 10%, and NRC 5%. Additionally, the financial data for the sentiment analysis uses @YahooFinance articles around each equity, as well as macro-level economic news around the world.
 
-$$
-\text{Sentiment} = \text{Loughran} \cdot 0.85 + \text{AFINN} \cdot 0.1 + \text{NRC} \cdot 0.05
-$$
+$$\text{Sentiment} = \text{Loughran} \cdot 0.85 + \text{AFINN} \cdot 0.1 + \text{NRC} \cdot 0.05$$
 
 ```{r}
 # Dynamic Webscraping
@@ -694,13 +690,13 @@ summary_tbl %>%
   )
 ```
 
--   **Score** $\geq$ **3rd quartile:** Strong positive sentiment
+- **Score** $\geq$ **3rd quartile:** Strong positive sentiment
 
--   **Median** $\leq$ **Score** $<$ **3rd quartile:** Positive sentiment
+- **Median** $\leq$ **Score** $<$ **3rd quartile:** Positive sentiment
 
--   $0 \leq$ **Score** $<$ **Median:** Weak positive sentiment
+- $0 \leq$ **Score** $<$ **Median:** Weak positive sentiment
 
--   **Score** $< 0$**:** Negative sentiment
+- **Score** $< 0$**:** Negative sentiment
 
 ```{r, include=FALSE}
 news_amzn %>% 
@@ -880,7 +876,7 @@ model_ml <- function(ticker){
   set.seed(123)
   
   table <- technicals(ticker)$table %>% 
-  tidyr::drop_na()
+    tidyr::drop_na()
   
   # Sampling
   split_data <- table %>%
@@ -986,7 +982,7 @@ model_ml <- function(ticker){
   
   
   
-  # Forecasting next weeks return
+  # Forecasting next week's return
   forecast_row <- technicals(ticker)$table %>% 
     dplyr::select(-future_return) %>% 
     dplyr::slice_tail(n = 1) # Taking the most recent date data for forecast
@@ -1061,6 +1057,7 @@ plot_it <- function(ticker){
     tidyr::drop_na()
   
   data_ml <- model_ml(ticker)$plot_bayes_tbl
+  
   
   plot_return <- table %>% 
     plotly::plot_ly(x = ~date) %>%
@@ -1164,6 +1161,51 @@ plot_it <- function(ticker){
 }
 ```
 
+## Stress Testing
+
+According to @Kenton_2025, stress testing is used to test portfolios across different scenarios. To stress test each portfolio under different scenarios it is first required to find the expected return for each equity when the market (\^GSPC) moves by a certain percentage.
+
+Using the Single Index Model equation:
+
+$$ r_i = \beta_i \cdot r_m + \alpha_i + \epsilon_i $$
+
+Where:
+
+$\alpha_i =$ Asset's expected return not explained by market movement. Helps determine if the asset is outperforms or underperforms
+
+$\epsilon_i =$ Return caused by idiosyncratic (firm specific) risk
+
+From here, I can solve for $\alpha_i$, turn the variables to expected, and then substitute that back to the original equation:
+
+$$ 
+\begin{gathered}
+\alpha_i = r_i - \beta_i \cdot r_m \\
+\alpha_i = E(r_i) - \beta_i \cdot E(r_m)
+\end{gathered}$$
+
+Now substituting
+
+$$\begin{gathered}
+r_i = \beta_i \cdot r_m + E(r_i) - \beta_i \cdot E(r_m) + \epsilon_i \\ 
+r_i = \beta_i (r_m - E(r_m)) + E(r_i) + \epsilon_i
+\end{gathered}$$
+
+Ignoring the idiosyncratic risk, $\epsilon_i$, the equation becomes:
+
+$$r_i = \beta_i (r_m - E(r_m)) + E(r_i)$$
+
+In the stress test I created three scenarios:
+
+- 40% market crash
+
+- 10% market recession
+
+- 10% market boom
+
+Additionally, @Longin_2001 mentioned that "Correlation increases in bear markets, but not in bull markets," suggesting that covariance increases during a market crash and a recession; therefore, I assumed covariance increases of 50% and 20% for a market crash and a recession, respectively.
+
+Although the risk-free rate decreases in a recession and market crash and increases in a market boom, I kept the risk-free rate constant for the stress test so I could isolate the portfolio's performance across different scenarios rather than attempt to estimate the exact value of a market crash.
+
 # The Analysis
 
 ```{r}
@@ -1187,6 +1229,203 @@ portfolio_cor <- function(ticker, port_long = portfolio, port_wide = portfolio_w
     order= "hclust",
     addCoef.col = "black"
     )
+}
+```
+
+```{r}
+# Portfolio calculation function
+portfolio_calc <- function(
+    ticker,
+    risk_free = r_f,
+    port_long = portfolio,
+    port_wide = portfolio_wide,
+    market_tbl = data_gspc
+    ){
+  set.seed(123)
+  
+  # Beta Calculation
+  beta_nvda <- stats::cov(market_tbl$gspc_return_log, port_wide$NVDA, use = "complete.obs") / stats::var(market_tbl$gspc_return_log)
+  beta_ba <- stats::cov(market_tbl$gspc_return_log, port_wide$BA, use = "complete.obs") / stats::var(market_tbl$gspc_return_log)
+  beta_cvx <- stats::cov(market_tbl$gspc_return_log, port_wide$CVX, use = "complete.obs") / stats::var(market_tbl$gspc_return_log)
+  beta_ko <- stats::cov(market_tbl$gspc_return_log, port_wide$KO, use = "complete.obs") / stats::var(market_tbl$gspc_return_log)
+  beta_jpm <- stats::cov(market_tbl$gspc_return_log, port_wide$JPM, use = "complete.obs") / stats::var(market_tbl$gspc_return_log)
+  
+  beta_new_stock <- stats::cov(data_gspc$gspc_return_log, technicals(ticker)$table$return_log, use = "complete.obs") / stats::var(data_gspc$gspc_return_log)
+  
+  
+  # Defining r_m - E(r_m) for each scenario
+  stress_return_crash <- log(1 - 0.4) - mean(market_tbl$gspc_return_log)
+  stress_return_rec <- log(1 - 0.1) - mean(market_tbl$gspc_return_log)
+  stress_return_boom <- log(1 + 0.1) - mean(market_tbl$gspc_return_log)
+  
+  
+  # Setting up all the exp ann. returns for the portfolio
+  port_stock <- c(
+    nvda = mean(port_wide$NVDA, na.rm = TRUE) * 52,
+    ba = mean(port_wide$BA, na.rm = TRUE) * 52,
+    cvx = mean(port_wide$CVX, na.rm = TRUE) * 52,
+    ko = mean(port_wide$KO, na.rm = TRUE) * 52,
+    jpm = mean(port_wide$JPM, na.rm = TRUE) * 52,
+    new_stock = mean(technicals(ticker)$table$return_log) * 52 # The annualized exp return
+  )
+  
+  stress_crash <- c(
+    nvda = (beta_nvda * stress_return_crash + mean(port_wide$NVDA, na.rm = TRUE)) * 52,
+    ba = (beta_ba * stress_return_crash + mean(port_wide$BA, na.rm = TRUE)) * 52,
+    cvx = (beta_cvx * stress_return_crash + mean(port_wide$CVX, na.rm = TRUE)) * 52,
+    ko = (beta_ko * stress_return_crash + mean(port_wide$KO, na.rm = TRUE)) * 52,
+    jpm = (beta_jpm * stress_return_crash + mean(port_wide$JPM, na.rm = TRUE)) * 52,
+    new_stock = (beta_new_stock * stress_return_crash + mean(technicals(ticker)$table$return_log, na.rm = TRUE)) * 52
+  )
+  
+  stress_rec <- c(
+    nvda = (beta_nvda * stress_return_rec + mean(port_wide$NVDA, na.rm = TRUE)) * 52,
+    ba = (beta_ba * stress_return_rec + mean(port_wide$BA, na.rm = TRUE)) * 52,
+    cvx = (beta_cvx * stress_return_rec + mean(port_wide$CVX, na.rm = TRUE)) * 52,
+    ko = (beta_ko * stress_return_rec + mean(port_wide$KO, na.rm = TRUE)) * 52,
+    jpm = (beta_jpm * stress_return_rec + mean(port_wide$JPM, na.rm = TRUE)) * 52,
+    new_stock = (beta_new_stock * stress_return_rec + mean(technicals(ticker)$table$return_log, na.rm = TRUE)) * 52
+  )
+  
+  stress_boom <- c(
+    nvda = (beta_nvda * stress_return_boom + mean(port_wide$NVDA, na.rm = TRUE)) * 52,
+    ba = (beta_ba * stress_return_boom + mean(port_wide$BA, na.rm = TRUE)) * 52,
+    cvx = (beta_cvx * stress_return_boom + mean(port_wide$CVX, na.rm = TRUE)) * 52,
+    ko = (beta_ko * stress_return_boom + mean(port_wide$KO, na.rm = TRUE)) * 52,
+    jpm = (beta_jpm * stress_return_boom + mean(port_wide$JPM, na.rm = TRUE)) * 52,
+    new_stock = (beta_new_stock * stress_return_boom + mean(technicals(ticker)$table$return_log, na.rm = TRUE)) * 52
+  )
+  
+  
+  # Calculating the Covarince for the new portfolio
+  new_stock_hist <- technicals(ticker)$table %>% 
+    dplyr::select(date, return_log) %>% 
+    dplyr::rename(new_stock = return_log)
+  
+  port_hist <- port_wide %>% 
+    dplyr::select(date, NVDA, BA, CVX, KO, JPM) %>% 
+    dplyr::left_join(new_stock_hist, by = "date") %>% 
+    dplyr::select(-date)
+  
+  annual_cov <- stats::cov(port_hist, use = "complete.obs") * 52
+  
+  stress_cov_crash <- annual_cov * 1.5
+  stress_cov_rec <- annual_cov * 1.2
+  
+  
+  # Running simulation to find the optimal portfolio values
+  sim <- replicate(5000, {
+    rnd_vals <- runif(6)
+    weight <- rnd_vals / sum(rnd_vals)
+    
+    port_rets <- sum(weight * port_stock)
+    port_sd <- sqrt(sum(weight * (annual_cov %*% weight)))
+    
+    stress_ret_crash <- sum(weight * stress_crash)
+    stress_sd_crash <- sqrt(sum(weight * (stress_cov_crash %*% weight)))
+    
+    stress_ret_rec <- sum(weight * stress_rec)
+    stress_sd_rec <- sqrt(sum(weight * (stress_cov_rec %*% weight)))
+    
+    stress_ret_boom <- sum(weight * stress_boom)
+    stress_sd_boom <- sqrt(sum(weight * (annual_cov %*% weight)))
+    
+    c(
+      NVDA = weight[1],
+      BA = weight[2],
+      CVX = weight[3],
+      KO = weight[4],
+      JPM = weight[5],
+      new_stock = weight[6],
+      return = port_rets,
+      sd = as.numeric(port_sd),
+      return_crash = stress_ret_crash,
+      sd_crash = stress_sd_crash,
+      return_rec = stress_ret_rec,
+      sd_rec = stress_sd_rec,
+      return_boom = stress_ret_boom,
+      sd_boom = stress_sd_boom
+    )
+  })
+  
+  sim <- as.data.frame(t(sim))
+  
+  sim <- sim %>% 
+    dplyr::mutate(
+      sharpe_ratio = (return - risk_free) / sd,
+      sharpe_crash = (return_crash - risk_free) / sd_crash,
+      sharpe_rec = (return_rec - risk_free) / sd_rec,
+      sharpe_boom = (return_boom - risk_free) / sd_boom
+      )
+  
+  opt_port <- sim %>% 
+    dplyr::slice_max(order_by = sharpe_ratio, n = 1)
+  
+  opt_crash <- sim %>% 
+    dplyr::slice_max(order_by = sharpe_crash, n = 1)
+  
+  opt_rec <- sim %>% 
+    dplyr::slice_max(order_by = sharpe_rec, n = 1)
+  
+  opt_boom <- sim %>% 
+    dplyr::slice_max(order_by = sharpe_boom, n = 1)
+  
+  
+  # Saving values to a table to be exported
+  port_tbl <- tibble::tibble(
+    equity = ticker,
+    return = opt_port$return,
+    sd = opt_port$sd,
+    sharpe_ratio = opt_port$sharpe_ratio,
+    NVDA_w = opt_port$NVDA,
+    BA_w = opt_port$BA,
+    CVX_w = opt_port$CVX,
+    KO_w = opt_port$KO,
+    JPM_w = opt_port$JPM,
+    new_stock_w = opt_port$new_stock
+  )
+  
+  crash_tbl <- tibble::tibble(
+    equity = ticker,
+    return = opt_crash$return_crash,
+    sd = opt_crash$sd_crash,
+    sharpe_ratio = opt_crash$sharpe_crash,
+    NVDA_w = opt_crash$NVDA,
+    BA_w = opt_crash$BA,
+    CVX_w = opt_crash$CVX,
+    KO_w = opt_crash$KO,
+    JPM_w = opt_crash$JPM,
+    new_stock_w = opt_crash$new_stock
+  )
+  
+  rec_tbl <- tibble::tibble(
+    equity = ticker,
+    return = opt_rec$return_rec,
+    sd = opt_rec$sd_rec,
+    sharpe_ratio = opt_rec$sharpe_rec,
+    NVDA_w = opt_rec$NVDA,
+    BA_w = opt_rec$BA,
+    CVX_w = opt_rec$CVX,
+    KO_w = opt_rec$KO,
+    JPM_w = opt_rec$JPM,
+    new_stock_w = opt_rec$new_stock
+  )
+  
+  boom_tbl <- tibble::tibble(
+    equity = ticker,
+    return = opt_boom$return_boom,
+    sd = opt_boom$sd_boom,
+    sharpe_ratio = opt_boom$sharpe_boom,
+    NVDA_w = opt_boom$NVDA,
+    BA_w = opt_boom$BA,
+    CVX_w = opt_boom$CVX,
+    KO_w = opt_boom$KO,
+    JPM_w = opt_boom$JPM,
+    new_stock_w = opt_boom$new_stock
+  )
+  
+  
+  return(list(port_tbl = port_tbl, crash_tbl = crash_tbl, rec_tbl = rec_tbl, boom_tbl = boom_tbl))
 }
 ```
 
@@ -1345,86 +1584,11 @@ sentiment_bwxt
 Using the forecasted return for each assessment equity as their expected return and computing the optimal weights for the portfolio when each one of the equities is added to the portfolio, it is noticeable that Lockheed Martin provides the most optimal risk-adjusted return portfolio with only a slight more risk than ENB's portfolio but with much more return.
 
 ```{r}
-# Portfolio calculation function
-portfolio_calc <- function(ticker, risk_free = r_f, port_long = portfolio, port_wide = portfolio_wide){
-  set.seed(123)
-  
-  # Setting up all the exp ann. returns for the portfolio
-  port_stock <- c(
-    nvda = mean(portfolio_wide$NVDA, na.rm = TRUE) * 52,
-    ba = mean(portfolio_wide$BA, na.rm = TRUE) * 52,
-    cvx = mean(portfolio_wide$CVX, na.rm = TRUE) * 52,
-    ko = mean(portfolio_wide$KO, na.rm = TRUE) * 52,
-    jpm = mean(portfolio_wide$JPM, na.rm = TRUE) * 52,
-    new_stock = model_ml(ticker)$exp_bayes_tbl$return # The annualized exp return
-  )
-  
-  
-  # Calculating the Covarince for the new portfolio
-  new_stock_hist <- technicals(ticker)$table %>% 
-    dplyr::select(date, return_log) %>% 
-    dplyr::rename(new_stock = return_log)
-  
-  port_hist <- port_wide %>% 
-    dplyr::select(date, NVDA, BA, CVX, KO, JPM) %>% 
-    dplyr::left_join(new_stock_hist, by = "date") %>% 
-    dplyr::select(-date)
-  
-  annual_cov <- stats::cov(port_hist, use = "complete.obs") * 52
-  
-  
-  # Running simulation to find the optimal portfolio values
-  sim <- replicate(5000, {
-    rnd_vals <- runif(6)
-    weight <- rnd_vals / sum(rnd_vals)
-    
-    port_rets <- sum(weight * port_stock)
-    port_sd <- sqrt(sum(weight * (annual_cov %*% weight)))
-    
-    c(
-      NVDA = weight[1],
-      BA = weight[2],
-      CVX = weight[3],
-      KO = weight[4],
-      JPM = weight[5],
-      new_stock = weight[6],
-      return = port_rets,
-      sd = as.numeric(port_sd)
-    )
-  })
-  
-  sim <- as.data.frame(t(sim))
-  
-  sim <- sim %>% 
-    dplyr::mutate(sharpe_ratio = (return - risk_free) / sd)
-  
-  opt_port <- sim %>% 
-    dplyr::slice_max(order_by = sharpe_ratio, n = 1)
-  
-  port_tbl <- tibble::tibble(
-    equity = ticker,
-    return = opt_port$return,
-    sd = opt_port$sd,
-    sharpe_ratio = opt_port$sharpe_ratio,
-    NVDA_w = opt_port$NVDA,
-    BA_w = opt_port$BA,
-    CVX_w = opt_port$CVX,
-    KO_w = opt_port$KO,
-    JPM_w = opt_port$JPM,
-    new_stock_w = opt_port$new_stock
-  )
-  
-  
-  return(port_tbl)
-}
-```
-
-```{r}
-plot_tsla <- portfolio_calc("TSLA") %>% dplyr::rename(TSLA_w = new_stock_w)
-plot_enb <- portfolio_calc("ENB") %>% dplyr::rename(ENB_w = new_stock_w)
-plot_amzn <- portfolio_calc("AMZN") %>% dplyr::rename(AMZN_w = new_stock_w)
-plot_lmt <- portfolio_calc("LMT") %>% dplyr::rename(LMT_w = new_stock_w)
-plot_bwxt <- portfolio_calc("BWXT") %>% dplyr::rename(BWXT_w = new_stock_w)
+plot_tsla <- portfolio_calc("TSLA")$port_tbl %>% dplyr::rename(TSLA_w = new_stock_w)
+plot_enb <- portfolio_calc("ENB")$port_tbl %>% dplyr::rename(ENB_w = new_stock_w)
+plot_amzn <- portfolio_calc("AMZN")$port_tbl %>% dplyr::rename(AMZN_w = new_stock_w)
+plot_lmt <- portfolio_calc("LMT")$port_tbl %>% dplyr::rename(LMT_w = new_stock_w)
+plot_bwxt <- portfolio_calc("BWXT")$port_tbl %>% dplyr::rename(BWXT_w = new_stock_w)
 
 plots_tbl <- dplyr::bind_rows(
   plot_tsla,
@@ -1520,17 +1684,17 @@ As depicted in the table below, Lockheed Martin's Sharpe Ratio is 1.7517.
 
 That said, it is also important to consider financial news sentiment when making a decision. As mentioned before, LMT has a weak positive financial news sentiment, but since its Sharpe Ratio is much larger than the second largest Sharpe Ratio, I would suggest adding LMT to the current portfolio with the following weightings:
 
--   **LMT:** 44.45%
+- **LMT:** 44.45%
 
--   **NVDA:** 17.84%
+- **NVDA:** 17.84%
 
--   **BA:** 0.18%
+- **BA:** 0.18%
 
--   **CVX:** 2.34%
+- **CVX:** 2.34%
 
--   **KO:** 19.46%
+- **KO:** 19.46%
 
--   **JPM:** 15.74%
+- **JPM:** 15.74%
 
 ```{r}
 plots_tbl %>%
