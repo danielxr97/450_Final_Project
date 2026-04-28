@@ -1194,7 +1194,7 @@ Ignoring the idiosyncratic risk, $\epsilon_i$, the equation becomes:
 
 $$r_i = \beta_i (r_m - E(r_m)) + E(r_i)$$
 
-In the stress test I created three scenarios:
+The stress test includes three scenarios:
 
 - 40% market crash
 
@@ -1383,7 +1383,8 @@ portfolio_calc <- function(
     KO_w = opt_port$KO,
     JPM_w = opt_port$JPM,
     new_stock_w = opt_port$new_stock
-  )
+  ) %>% 
+    dplyr::rename("{ticker}_w" := new_stock_w) # Can also do !!sym(paste0(ticker, "_w")) := new_stock_w
   
   crash_tbl <- tibble::tibble(
     equity = ticker,
@@ -1396,7 +1397,8 @@ portfolio_calc <- function(
     KO_w = opt_crash$KO,
     JPM_w = opt_crash$JPM,
     new_stock_w = opt_crash$new_stock
-  )
+  ) %>% 
+    dplyr::rename("{ticker}_w" := new_stock_w)
   
   rec_tbl <- tibble::tibble(
     equity = ticker,
@@ -1409,7 +1411,8 @@ portfolio_calc <- function(
     KO_w = opt_rec$KO,
     JPM_w = opt_rec$JPM,
     new_stock_w = opt_rec$new_stock
-  )
+  ) %>% 
+    dplyr::rename("{ticker}_w" := new_stock_w)
   
   boom_tbl <- tibble::tibble(
     equity = ticker,
@@ -1422,10 +1425,127 @@ portfolio_calc <- function(
     KO_w = opt_boom$KO,
     JPM_w = opt_boom$JPM,
     new_stock_w = opt_boom$new_stock
-  )
+  ) %>% 
+    dplyr::rename("{ticker}_w" := new_stock_w)
   
   
   return(list(port_tbl = port_tbl, crash_tbl = crash_tbl, rec_tbl = rec_tbl, boom_tbl = boom_tbl))
+}
+```
+
+```{r}
+plot_stress <- function(
+    ticker,
+    sim_tbl = simulation,
+    port_tbl = portfolio_table,
+    best_sharpe = best_sharpe_ratio,
+    opt_tbl = optimal_table
+    ){
+  
+  # Stress Table
+  stock_actual <- portfolio_calc(ticker)$port_tbl %>% dplyr::transmute(scenario = "Actual", return, sd, sharpe_ratio)
+  stock_crash <- portfolio_calc(ticker)$crash_tbl %>% dplyr::transmute(scenario = "Crash", return, sd, sharpe_ratio)
+  stock_rec <- portfolio_calc(ticker)$rec_tbl %>% dplyr::transmute(scenario = "Recession", return, sd, sharpe_ratio)
+  stock_boom <- portfolio_calc(ticker)$boom_tbl %>% dplyr::transmute(scenario = "Boom", return, sd, sharpe_ratio)
+  
+  stress_tbl <- dplyr::bind_rows(
+    stock_actual,
+    stock_crash,
+    stock_rec,
+    stock_boom
+  ) 
+  
+  stress_tbl <- stress_tbl %>% 
+    dplyr::mutate(
+      delta = return - stress_tbl %>% dplyr::filter(scenario == "Actual") %>% dplyr::pull(return)
+    )
+  
+  
+  # Stress Plot
+  plot_stress <- sim_tbl %>% ggplot2::ggplot(ggplot2::aes(x = sd, y = return, color = return)) +
+    ggplot2::geom_point(alpha = 0.3) + 
+    ggplot2::scale_color_viridis_c(name = "Log Return") +
+    ggnewscale::new_scale_color() +
+    ggplot2::geom_point(
+      data = best_sharpe,
+      ggplot2::aes(x = sd, y = return),
+      color = "orange",
+      size = 2
+    ) +
+    ggrepel::geom_text_repel(
+      data = best_sharpe,
+      ggplot2::aes(x = sd, y = return, label = "Optimal Portfolio"),
+      color = "black",
+      segment.color = "black",
+      min.segment.length = 0,
+      nudge_x = -0.025,
+      nudge_y = 0.02
+    ) +
+    ggplot2::geom_line(
+      data = opt_tbl,
+      ggplot2::aes(x = sd, y = return),
+      color = "orange"
+    ) +
+    ggplot2::geom_point(
+      data = port_tbl,
+      ggplot2::aes(x = portfolio_exp_sd, y = portfolio_exp_return),
+      color = "palevioletred1",
+      size = 2
+    ) + 
+    ggrepel::geom_text_repel(
+      data = port_tbl,
+      ggplot2::aes(x = portfolio_exp_sd, y = portfolio_exp_return, label = "Current Portfolio"),
+      color = "black",
+      segment.color = "black",
+      min.segment.length = 0,
+      nudge_x = 0.045,
+      nudge_y = 0.025
+    ) +
+    ggplot2::geom_point(
+      data = stock_actual,
+      ggplot2::aes(x = sd, y = return, color = scenario),
+      size = 2,
+      color = "lightgoldenrod1"
+    ) + 
+    ggrepel::geom_text_repel(
+      data = stock_actual,
+      ggplot2::aes(x = sd, y = return, label = paste(ticker, "Portfolio")),
+      color = "black",
+      segment.color = "black",
+      min.segment.length = 0,
+      nudge_x = 0.045,
+      nudge_y = -0.025
+    ) +
+    ggplot2::labs(
+      title = "The Efficient Frontier",
+      x = "Annualized Standard Deviation (Risk)",
+      y = "Annualized Expected Log Return",
+      color = "Log Return"
+    ) +
+    ggplot2::theme(plot.title = element_text(hjust = 0.5))
+    
+  
+  plot_bar <- stress_tbl %>% 
+    dplyr::mutate(
+      return_color = dplyr::case_when(
+        return > 0 ~ "#2ECC71",
+        return < 0 ~ "#E74C3C"
+      )
+        ) %>% 
+    dplyr::filter(scenario != "Actual") %>% 
+    ggplot2::ggplot(ggplot2::aes(x = scenario, y = delta, fill = return_color)) +
+    ggplot2::geom_col() +
+    ggplot2::scale_fill_identity() +
+    ggplot2::labs(
+      title = paste(ticker, "Portfolio Sensitivity to Market Scenarios"),
+      subtitle = "Deviation in Expected Returns from Baseline Case",
+      x = "Market Scenario",
+      y = "Change in Expected Return"
+    ) +
+    ggplot2::theme(plot.title = element_text(hjust = 0.5)) +
+    ggplot2::theme(plot.subtitle = element_text(hjust = 0.5))
+  
+  return(list(table = stress_tbl, plot_ef = plot_stress, plot_bar = plot_bar))
 }
 ```
 
@@ -1461,6 +1581,41 @@ sentiment_tsla <- sentiment_analysis(clean_tsla)
 sentiment_tsla
 ```
 
+```{r}
+stress_tsla <- plot_stress("TSLA")
+```
+
+```{r, message=FALSE}
+stress_tsla$plot_ef
+```
+
+```{r}
+stress_tsla$plot_bar
+```
+
+```{r}
+stress_tsla$table %>% 
+  dplyr::rename(
+    Scenario = scenario,
+    Return = return,
+    Delta = delta,
+    SD = sd,
+    `Sharpe Ratio` = sharpe_ratio
+  ) %>% 
+  dplyr::arrange(desc(`Sharpe Ratio`)) %>% 
+  gt::gt() %>% 
+  gt::fmt_number(columns = `Sharpe Ratio`, decimals = 4) %>% 
+  gt::fmt_percent(
+    columns = c(Return, SD, Delta),
+    decimals = 2
+  ) %>% 
+  gt::tab_header(title = "TSLA Portfolio Sensitivity To Market") %>% 
+  gt::tab_style(
+    style = cell_fill(color = "indianred"),
+    locations = cells_title(groups = "title")
+  )
+```
+
 ## Enbridge
 
 Looking at Enbridge, the Bayesian model predicts a large weekly return of 0.68% with a prediction interval of \[-4.80%, 6.17%\], indicating a moderate uncertainty in the forecast. Compared to other equities, Enbridge has the narrowest interval, suggesting stable, predictable returns.
@@ -1491,6 +1646,41 @@ sentiment_enb <- sentiment_analysis(clean_enb)
 sentiment_enb
 ```
 
+```{r}
+stress_enb <- plot_stress("ENB")
+```
+
+```{r, message=FALSE}
+stress_enb$plot_ef
+```
+
+```{r}
+stress_enb$plot_bar
+```
+
+```{r}
+stress_enb$table %>% 
+  dplyr::rename(
+    Scenario = scenario,
+    Return = return,
+    Delta = delta,
+    SD = sd,
+    `Sharpe Ratio` = sharpe_ratio
+  ) %>% 
+  dplyr::arrange(desc(`Sharpe Ratio`)) %>% 
+  gt::gt() %>% 
+  gt::fmt_number(columns = `Sharpe Ratio`, decimals = 4) %>% 
+  gt::fmt_percent(
+    columns = c(Return, SD, Delta),
+    decimals = 2
+  ) %>% 
+  gt::tab_header(title = "ENB Portfolio Sensitivity To Market") %>% 
+  gt::tab_style(
+    style = cell_fill(color = "indianred"),
+    locations = cells_title(groups = "title")
+  )
+```
+
 ## Amazon
 
 Looking at Amazon, the Bayesian model predicts a weekly return of -0.31% with a prediction interval of \[-9.68%, 9.06%\], indicating a high uncertainty in the forecast.
@@ -1517,6 +1707,41 @@ sentiment_amzn <- sentiment_analysis(clean_amzn)
 
 ```{r, eval=FALSE}
 sentiment_amzn
+```
+
+```{r}
+stress_amzn <- plot_stress("AMZN")
+```
+
+```{r, message=FALSE}
+stress_amzn$plot_ef
+```
+
+```{r}
+stress_amzn$plot_bar
+```
+
+```{r}
+stress_amzn$table %>% 
+  dplyr::rename(
+    Scenario = scenario,
+    Return = return,
+    Delta = delta,
+    SD = sd,
+    `Sharpe Ratio` = sharpe_ratio
+  ) %>% 
+  dplyr::arrange(desc(`Sharpe Ratio`)) %>% 
+  gt::gt() %>% 
+  gt::fmt_number(columns = `Sharpe Ratio`, decimals = 4) %>% 
+  gt::fmt_percent(
+    columns = c(Return, SD, Delta),
+    decimals = 2
+  ) %>% 
+  gt::tab_header(title = "AMZN Portfolio Sensitivity To Market") %>% 
+  gt::tab_style(
+    style = cell_fill(color = "indianred"),
+    locations = cells_title(groups = "title")
+  )
 ```
 
 ## Lockheed Martin
@@ -1549,6 +1774,41 @@ sentiment_lmt <- sentiment_analysis(clean_lmt)
 sentiment_lmt
 ```
 
+```{r}
+stress_lmt <- plot_stress("LMT")
+```
+
+```{r, message=FALSE}
+stress_lmt$plot_ef
+```
+
+```{r}
+stress_lmt$plot_bar
+```
+
+```{r}
+stress_lmt$table %>% 
+  dplyr::rename(
+    Scenario = scenario,
+    Return = return,
+    Delta = delta,
+    SD = sd,
+    `Sharpe Ratio` = sharpe_ratio
+  ) %>% 
+  dplyr::arrange(desc(`Sharpe Ratio`)) %>% 
+  gt::gt() %>% 
+  gt::fmt_number(columns = `Sharpe Ratio`, decimals = 4) %>% 
+  gt::fmt_percent(
+    columns = c(Return, SD, Delta),
+    decimals = 2
+  ) %>% 
+  gt::tab_header(title = "LMT Portfolio Sensitivity To Market") %>% 
+  gt::tab_style(
+    style = cell_fill(color = "indianred"),
+    locations = cells_title(groups = "title")
+  )
+```
+
 ## BWX Technologies
 
 For BWX Technologies, the Bayesian model predicts a weekly return of 0.43% with a prediction interval of \[-6.81%, 7.68%\], indicating a moderate uncertainty in the forecast.
@@ -1579,16 +1839,51 @@ sentiment_bwxt <- sentiment_analysis(clean_bwxt)
 sentiment_bwxt
 ```
 
+```{r}
+stress_bwxt <- plot_stress("BWXT")
+```
+
+```{r, message=FALSE}
+stress_bwxt$plot_ef
+```
+
+```{r}
+stress_bwxt$plot_bar
+```
+
+```{r}
+stress_bwxt$table %>% 
+  dplyr::rename(
+    Scenario = scenario,
+    Return = return,
+    Delta = delta,
+    SD = sd,
+    `Sharpe Ratio` = sharpe_ratio
+  ) %>% 
+  dplyr::arrange(desc(`Sharpe Ratio`)) %>% 
+  gt::gt() %>% 
+  gt::fmt_number(columns = `Sharpe Ratio`, decimals = 4) %>% 
+  gt::fmt_percent(
+    columns = c(Return, SD, Delta),
+    decimals = 2
+  ) %>% 
+  gt::tab_header(title = "BWXT Portfolio Sensitivity To Market") %>% 
+  gt::tab_style(
+    style = cell_fill(color = "indianred"),
+    locations = cells_title(groups = "title")
+  )
+```
+
 # Conclusion
 
 Using the forecasted return for each assessment equity as their expected return and computing the optimal weights for the portfolio when each one of the equities is added to the portfolio, it is noticeable that Lockheed Martin provides the most optimal risk-adjusted return portfolio with only a slight more risk than ENB's portfolio but with much more return.
 
 ```{r}
-plot_tsla <- portfolio_calc("TSLA")$port_tbl %>% dplyr::rename(TSLA_w = new_stock_w)
-plot_enb <- portfolio_calc("ENB")$port_tbl %>% dplyr::rename(ENB_w = new_stock_w)
-plot_amzn <- portfolio_calc("AMZN")$port_tbl %>% dplyr::rename(AMZN_w = new_stock_w)
-plot_lmt <- portfolio_calc("LMT")$port_tbl %>% dplyr::rename(LMT_w = new_stock_w)
-plot_bwxt <- portfolio_calc("BWXT")$port_tbl %>% dplyr::rename(BWXT_w = new_stock_w)
+plot_tsla <- portfolio_calc("TSLA")$port_tbl
+plot_enb <- portfolio_calc("ENB")$port_tbl
+plot_amzn <- portfolio_calc("AMZN")$port_tbl
+plot_lmt <- portfolio_calc("LMT")$port_tbl
+plot_bwxt <- portfolio_calc("BWXT")$port_tbl
 
 plots_tbl <- dplyr::bind_rows(
   plot_tsla,
